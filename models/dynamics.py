@@ -7,7 +7,7 @@ from utils import get_space_shape
 
 class FullyConnectedDynamicsModel(torch.nn.Module):
 
-    def __init__(self, env: gym.Env, embedding_size: int, out_features: int = 2):
+    def __init__(self, env: gym.Env, embedding_size: int, out_features: int = 1):
         super().__init__()
 
         self.action_space = env.action_space
