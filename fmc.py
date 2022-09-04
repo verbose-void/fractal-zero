@@ -17,6 +17,15 @@ def _relativize_vector(vector):
     return standard
 
 class FMC:
+    """Fractal Monte Carlo is a collaborative cellular automata based tree search algorithm. This version is special, because instead of having a gym
+    environment maintain the state for each walker during the search process, each walker's state is represented inside of a batched hidden
+    state variable inside of a dynamics model. Basically, the dynamics model's hidden state is of shape (num_walkers, *embedding_shape).
+
+    This is inspired by Muzero's technique to have a dynamics model be learned such that the tree search need not interact with the environment
+    itself. With FMC, it is much more natural than with MCTS, mostly because of the cloning phase being contrastive. As an added benefit of this
+    approach, it's natively vectorized so it can be put onto the GPU.
+    """
+
     def __init__(self, num_walkers: int, dynamics_model, initial_state, balance: float = 1, verbose: bool = False):
         self.num_walkers = num_walkers
         self.balance = balance
@@ -35,11 +44,14 @@ class FMC:
 
     @torch.no_grad()
     def _perturbate(self):
+        """Advance the state of each walker."""
+
         self._assign_actions()
         self.rewards = self.dynamics_model.forward(self.actions)
 
     @torch.no_grad()
     def simulate(self, k: int):
+        """Run FMC for k iterations, returning the best action that was taken at the root/initial state."""
 
         for _ in range(k):
             self._perturbate()
@@ -52,12 +64,14 @@ class FMC:
         # sanity check
         assert self.dynamics_model.state.shape == (self.num_walkers, self.dynamics_model.embedding_size)
 
-        return self.actions[0, 0].numpy()  # TODO select the actual best action
+        # TODO return the actual best action taken at the root
+        return self.actions[0, 0].numpy() 
 
     @torch.no_grad()
     def _assign_actions(self):
-        # TODO: policy function
-        
+        """Each walker picks an action to advance it's state."""
+
+        # TODO: policy function?
         actions = []
         for _ in range(self.num_walkers):
             action = self.dynamics_model.action_space.sample()
@@ -66,14 +80,22 @@ class FMC:
 
     @torch.no_grad()
     def _assign_clone_partners(self):
+        """For the cloning phase, walkers need a partner to determine if they should be sent as reinforcements to their partner's state."""
+            
         self.clone_partners = np.random.choice(np.arange(self.num_walkers), size=self.num_walkers)
 
     @torch.no_grad()
     def _calculate_distances(self):
+        """For the cloning phase, we calculate the distances between each walker and their partner for balancing exploration."""
+
         self.distances = torch.linalg.norm(self.state - self.state[self.clone_partners], dim=1)
 
     @torch.no_grad()
     def _calculate_virtual_rewards(self):
+        """For the cloning phase, we calculate a virtual reward that is the composite of each walker's distance to their partner weighted with
+        their rewards. This is used to determine the probability to clone and is used to balance exploration and exploitation.
+        """
+
         activated_rewards = _relativize_vector(self.rewards.squeeze(-1))
         activated_distances = _relativize_vector(self.distances)
 
@@ -81,6 +103,10 @@ class FMC:
 
     @torch.no_grad()
     def _determine_clone_mask(self):
+        """The clone mask is based on the virtual rewards of each walker and their clone partner. If a walker is selected to clone, their
+        state will be replaced with their partner's state.
+        """
+
         vr = self.virtual_rewards
         pair_vr = vr[self.clone_partners]
 
@@ -90,6 +116,12 @@ class FMC:
 
     @torch.no_grad()
     def _clone_states(self):
+        """The cloning phase is where the collaboration of the cellular automata comes from. Using the virtual rewards calculated for
+        each walker and clone partners that are randomly assigned, there is a probability that some walkers will be sent as reinforcements
+        to their randomly assigned clone partner.
+
+        The goal of the clone phase is to maintain a balanced density over state occupations with respect to exploration and exploitation.   
+        """
 
         # prepare virtual rewards and partner virtual rewards
         self._assign_clone_partners()
@@ -118,6 +150,10 @@ class FMC:
 
     @torch.no_grad()
     def _update_game_tree(self):
+        """A tree of walker trajectories is maintained so that after the simulation is complete, we can analyze the actions
+        taken and choose the best trajectory according to the reward estimations.
+        """
+
         candidate_walker_ids = torch.randint(1, 9999999, (self.num_walkers,))
 
         for walker_index in range(self.num_walkers):
@@ -135,7 +171,4 @@ class FMC:
 
         candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
         self.walker_node_ids[:] = candidate_walker_ids
-
-        # clone new node ids
-        # self.walker_node_ids[:] = candidate_walker_ids
-        # self.walker_node_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
+        
