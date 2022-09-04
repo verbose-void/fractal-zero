@@ -148,6 +148,7 @@ class FMC:
 
         # execute clone
         self.dynamics_model.state[self.clone_mask] = self.dynamics_model.state[self.clone_partners[self.clone_mask]]
+        self.actions[self.clone_mask] = self.actions[self.clone_partners[self.clone_mask]]
 
         if self.verbose:
             print("state after", self.dynamics_model.state)
@@ -159,13 +160,14 @@ class FMC:
         """
 
         candidate_walker_ids = torch.randint(1, 9999999, (self.num_walkers,))
+        candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
 
         for walker_index in range(self.num_walkers):
             cloned = self.clone_mask[walker_index]
 
-            if cloned:
+            # if cloned:
                 # TODO: prune tree (remove all nodes/edges before)
-                continue
+                # continue
 
             previous_node = self.walker_node_ids[walker_index].item()
             new_node = candidate_walker_ids[walker_index].item()
@@ -173,20 +175,45 @@ class FMC:
             self.game_tree.add_node(new_node, state=self.dynamics_model.state[walker_index])
 
             weight = self.rewards[walker_index].item()
-            self.game_tree.add_edge(previous_node, new_node, action=self.actions[walker_index], weight=weight)
+            path_weight = 9999999 - weight
+            self.game_tree.add_edge(previous_node, new_node, action=self.actions[walker_index], weight=weight, path_weight=path_weight)
 
-        candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
         self.walker_node_ids[:] = candidate_walker_ids
 
     @torch.no_grad()
     def _pick_root_action(self):
-        # TODO return the actual best action taken at the root
+        # TODO optimize this!
 
         # print(self.game_tree)
-        highest_weight_walker_path = nx.dag_longest_path(self.game_tree, weight="weight")
+        # highest_weight_walker_path = nx.dag_longest_path(self.game_tree, weight="weight")
+
+        # edges = [(highest_weight_walker_path[i], highest_weight_walker_path[i+1]) for i in range(len(highest_weight_walker_path) - 1)]
+        # color_map = ['green' if node == self.root else 'black' for node in self.game_tree]
+        # edge_color = ['red' if edge in edges else "black" for edge in self.game_tree.edges]
+        # nx.draw(self.game_tree, node_color=color_map)#, edge_color=edge_color)
+        # plt.show()
+
+        best_path = None
+        lowest_distance = float("inf")
+
+        for walker_index in range(self.num_walkers):
+            walker_node = self.walker_node_ids[walker_index].item()
+
+            # find longest path between root and current walker node
+            distance, path = nx.single_source_dijkstra(self.game_tree, self.root, walker_node, weight="path_weight")
+
+            if distance < lowest_distance:
+                lowest_distance = distance
+                best_path = path
+
+        if len(best_path) <= 1:
+            raise ValueError(f"The best path length must be >= 2. Got: {best_path}.")
+
+        u, v = best_path[0], best_path[1]
 
         # sanity check
-        if highest_weight_walker_path[0] != self.root:
-            raise ValueError(f"The highest weight walker path is expected to begin at the root. Got: {highest_weight_walker_path}")
-        
-        return self.actions[0, 0].numpy()
+        if u != self.root:
+            raise ValueError(f"The first node in the selected path is expected to be the root node ({self.root}), instead got: {u}.")
+
+        action = self.game_tree.edges[u, v]["action"]
+        return action[0].numpy()
