@@ -1,7 +1,7 @@
 import gym
 
 import torch
-from fmc import lookahead
+from fmc import FMC, lookahead
 
 from models.dynamics import FullyConnectedDynamicsModel
 from models.representation import FullyConnectedRepresentationModel
@@ -24,7 +24,9 @@ if __name__ == "__main__":
         obs = torch.tensor(obs)
 
         state = representation_model.forward(obs)
-        action = lookahead(state, dynamics_model, lookahead_steps)
+
+        # action = lookahead(state, dynamics_model, lookahead_steps)
+        action = FMC(4, dynamics_model, state).simulate(lookahead_steps)
 
         obs, reward, done, info = env.step(action)
         print("reward", reward)
