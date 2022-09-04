@@ -39,39 +39,37 @@ def get_virtual_rewards(rewards, distances, balance: float = 1):
 
 
 @torch.no_grad()
-def do_state_cloning(dynamics_model, num_walkers: int, rewards):
+def do_state_cloning(dynamics_model, num_walkers: int, rewards, verbose: bool = False):
     assert dynamics_model.state.shape == (num_walkers, dynamics_model.embedding_size)
 
+    # prepare virtual rewards and partner virtual rewards
     state_order = get_random_state_order(num_walkers)
     distances = get_distances(dynamics_model.state, state_order)
     vr = get_virtual_rewards(rewards, distances)
-
-    # TODO: don't clone best walker
-    print()
-    print()
-    print()
-    print()
-    print('clone stats:')
-    print("state order", state_order)
-    print("distances", distances)
-    print("virtual rewards", vr)
-
     pair_vr = vr[state_order]
 
+    # prepare clone mask
     clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
     r = np.random.uniform()
-
     clone_mask = clone_probabilities >= r
 
-    print("clone probabilities", clone_probabilities)
-    print("clone mask", clone_mask)
-    
+    # TODO: don't clone best walker
+    if verbose:
+        print()
+        print()
+        print('clone stats:')
+        print("state order", state_order)
+        print("distances", distances)
+        print("virtual rewards", vr)
+        print("clone probabilities", clone_probabilities)
+        print("clone mask", clone_mask)
+        print("state before", dynamics_model.state)
 
-    # print()
-    print("state before", dynamics_model.state)
-
+    # execute clone
     dynamics_model.state[clone_mask] = dynamics_model.state[state_order[clone_mask]]
-    print("state after", dynamics_model.state)
+
+    if verbose:
+        print("state after", dynamics_model.state)
 
 
 @torch.no_grad()
@@ -88,17 +86,12 @@ def lookahead(initial_state, dynamics_model, k: int, num_walkers: int = 4):
 
     for _ in range(k):
         actions = get_random_actions(dynamics_model, num_walkers)
-        print(state.shape, actions.shape)
-
         rewards = dynamics_model.forward(actions)
 
         action_history.append(actions)
         reward_history.append(rewards)
 
         do_state_cloning(dynamics_model, num_walkers, rewards)
-
-        print(rewards.shape)
-
 
     # TODO: select the best action
     return action_history[0][0, 0].numpy()
