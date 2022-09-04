@@ -2,6 +2,11 @@ import gym
 
 from latent_env import LatentEnv
 
+import torch
+
+from models.dynamics import FullyConnectedDynamicsModel
+from models.representation import FullyConnectedRepresentationModel
+
 
 
 def lookahead(latent_env: LatentEnv, n: int):
@@ -18,7 +23,13 @@ if __name__ == "__main__":
     env = gym.make('CartPole-v0')
     env.reset()
 
-    latent_env = LatentEnv(observation_space=env.observation_space, action_space=env.action_space)
+    embedding_size = 16
+    out_features = 2
+
+    representation_model =  FullyConnectedRepresentationModel(env.observation_space.shape, embedding_size)
+    dynamics_model = FullyConnectedDynamicsModel(env.action_space.shape, embedding_size, out_features=out_features)
+
+    latent_env = LatentEnv(observation_space=env.observation_space, action_space=env.action_space, model=dynamics_model)
 
 
     lookahead_steps = 10
