@@ -10,7 +10,8 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
     def __init__(self, env: gym.Env, embedding_size: int, out_features: int = 2):
         super().__init__()
 
-        self.action_shape = get_space_shape(env.action_space)
+        self.action_space = env.action_space
+        self.action_shape = get_space_shape(self.action_space)
 
         self.embedding_size = embedding_size
         self.out_features = out_features
@@ -30,9 +31,12 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
         self.state = state
 
     def forward(self, action):
+        if len(action.shape) == 0:
+            action = torch.unsqueeze(action, 0)
+
         x = torch.concat((self.state, action))
 
         self.state = self.embedding_net(x)
         output = self.auxiliary_net(self.state)
         
-        return output 
+        return output
