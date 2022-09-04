@@ -38,21 +38,46 @@ def get_virtual_rewards(rewards, distances, balance: float = 1):
     return activated_rewards * activated_distances ** balance
 
 
+@torch.no_grad()
 def do_state_cloning(dynamics_model, num_walkers: int, rewards):
     assert dynamics_model.state.shape == (num_walkers, dynamics_model.embedding_size)
 
     state_order = get_random_state_order(num_walkers)
     distances = get_distances(dynamics_model.state, state_order)
-    virtual_rewards = get_virtual_rewards(rewards, distances)
+    vr = get_virtual_rewards(rewards, distances)
 
     # TODO: don't clone best walker
+    print()
+    print()
+    print()
+    print()
     print('clone stats:')
     print("state order", state_order)
     print("distances", distances)
-    print("virtual rewards", virtual_rewards)
+    print("virtual rewards", vr)
+
+    pair_vr = vr[state_order]
+
+    clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
+    r = np.random.uniform()
+
+    clone_mask = clone_probabilities >= r
+
+    print("clone probabilities", clone_probabilities)
+    print("clone mask", clone_mask)
+    
+
+    # print()
+    print("state before", dynamics_model.state)
+
+    dynamics_model.state[clone_mask] = dynamics_model.state[state_order[clone_mask]]
+    print("state after", dynamics_model.state)
 
 
+@torch.no_grad()
 def lookahead(initial_state, dynamics_model, k: int, num_walkers: int = 4):
+    # TODO: ensure the dynamics model weights remain fixed and have no gradients.
+
     action_history = []
     reward_history = []
 
