@@ -9,33 +9,43 @@ from models.representation import FullyConnectedRepresentationModel
 
 
 
-def lookahead(latent_env: LatentEnv, n: int):
+def lookahead(state, latent_env: LatentEnv, n: int):
     actions = []
+
+    latent_env.set_state(state)
+
     for _ in range(n):
-        action = latent_env.action_space.sample()
+        action = torch.tensor(latent_env.action_space.sample())
+        print(action.shape)
+
         latent_env.step(action)
 
         actions.append(action)
-    return actions[0]
+
+    return actions[0].numpy()
     
 
 if __name__ == "__main__":
     env = gym.make('CartPole-v0')
-    env.reset()
+    obs = env.reset()
 
     embedding_size = 16
     out_features = 2
 
-    representation_model =  FullyConnectedRepresentationModel(env.observation_space.shape, embedding_size)
-    dynamics_model = FullyConnectedDynamicsModel(env.action_space.shape, embedding_size, out_features=out_features)
+    representation_model =  FullyConnectedRepresentationModel(env, embedding_size)
+    dynamics_model = FullyConnectedDynamicsModel(env, embedding_size, out_features=out_features)
 
-    latent_env = LatentEnv(observation_space=env.observation_space, action_space=env.action_space, model=dynamics_model)
+    latent_env = LatentEnv(env, model=dynamics_model)
 
 
     lookahead_steps = 10
     steps = 10
     for _ in range(steps):
-        action = lookahead(latent_env, lookahead_steps)
+        obs = torch.tensor(obs)
+
+        state = representation_model.forward(obs)
+        action = lookahead(state, latent_env, lookahead_steps)
+
         obs, reward, done, info = env.step(action)
         print("reward", reward)
         if done:
