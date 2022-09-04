@@ -3,6 +3,8 @@ import torch
 import numpy as np
 import networkx as nx
 
+import matplotlib.pyplot as plt
+
 
 @torch.no_grad()
 def _get_random_actions(dynamics_model, n: int):
@@ -80,23 +82,26 @@ def _clone_states(dynamics_model, num_walkers: int, rewards, verbose: bool = Fal
     return clone_partners, clone_mask
 
 
-def _update_game_tree(game_tree: nx.Graph, step: int, actions, clone_partners, clone_mask, dynamics_model):
-    assert step > 0
-
+def _update_game_tree(game_tree: nx.DiGraph, walker_node_ids: torch.Tensor, actions, clone_partners, clone_mask, dynamics_model):
     num_walkers = dynamics_model.state.shape[0]
 
-    for walker_index in range(num_walkers):
-        node_name = f"state_w{walker_index}_s{step}"
+    candidate_walker_ids = torch.randint(99999, 999999999999, (num_walkers,))
 
+    for walker_index in range(num_walkers):
         cloned = clone_mask[walker_index]
 
         if cloned:
             # TODO: prune tree (remove all nodes/edges before)
             continue
 
-        previous_node = 0 if step == 1 else f"state_w{walker_index}_s{step-1}"
+        previous_node = walker_node_ids[walker_index]
+        new_node = candidate_walker_ids[walker_index]
 
-        game_tree.add_node(node_name)
+        game_tree.add_node(new_node, state=dynamics_model.state[walker_index])
+        game_tree.add_edge(previous_node, new_node, action=actions[walker_index])
+
+    # clone new node ids
+    walker_node_ids[clone_mask] = candidate_walker_ids[clone_partners[clone_mask]]
 
 
 @torch.no_grad()
@@ -106,23 +111,27 @@ def lookahead(initial_state, dynamics_model, k: int, num_walkers: int = 4):
     action_history = []
     reward_history = []
 
-    game_tree = nx.Graph()
+    game_tree = nx.DiGraph()
 
-    # root
-    game_tree.add_node(0, state=initial_state)
+    root = 0
+    game_tree.add_node(root, state=initial_state)
+    walker_node_ids = torch.zeros(num_walkers, dtype=torch.long)
 
     state = torch.zeros((num_walkers, *initial_state.shape))
     state[:] = initial_state
 
     dynamics_model.set_state(state)
 
-    for step in range(k):
+    for _ in range(k):
         actions = _get_random_actions(dynamics_model, num_walkers)  # TODO: introduce a policy function
         rewards = dynamics_model.forward(actions)
 
         clone_partners, clone_mask = _clone_states(dynamics_model, num_walkers, rewards)
 
-        _update_game_tree(game_tree, step + 1, actions, clone_partners, clone_mask, dynamics_model)
+        _update_game_tree(game_tree, walker_node_ids, actions, clone_partners, clone_mask, dynamics_model)
+
+    nx.draw(game_tree)
+    plt.show()
 
     # TODO: select the best action
     return action_history[0][0, 0].numpy()
