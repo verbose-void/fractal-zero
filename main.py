@@ -6,18 +6,31 @@ from models.dynamics import FullyConnectedDynamicsModel
 from models.representation import FullyConnectedRepresentationModel
 
 
-
-def lookahead(state, dynamics_model, k: int):
+def get_random_actions(dynamics_model, n: int):
     actions = []
+    for _ in range(n):
+        action = dynamics_model.action_space.sample()
+        actions.append(action)
+    return torch.tensor(actions).unsqueeze(-1)
+
+
+def lookahead(initial_state, dynamics_model, k: int, num_walkers: int = 4):
+    action_history = []
+
+    state = torch.zeros((num_walkers, *initial_state.shape))
+    state[:] = initial_state
 
     dynamics_model.set_state(state)
 
     for _ in range(k):
-        action = torch.tensor(dynamics_model.action_space.sample())
-        dynamics_model.forward(action)
-        actions.append(action)
+        actions = get_random_actions(dynamics_model, num_walkers)
+        print(state.shape, actions.shape)
 
-    return actions[0].numpy()
+        dynamics_model.forward(actions)
+        action_history.append(actions)
+
+    # TODO: select the best action
+    return action_history[0][0, 0].numpy()
     
 
 if __name__ == "__main__":

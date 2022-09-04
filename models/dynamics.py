@@ -28,13 +28,15 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
         self.state = None
     
     def set_state(self, state: torch.Tensor):
+        assert len(state.shape) <= 2
+        assert state.shape[-1] == self.embedding_size
         self.state = state
 
     def forward(self, action):
         if len(action.shape) == 0:
             action = torch.unsqueeze(action, 0)
 
-        x = torch.concat((self.state, action))
+        x = torch.concat((self.state, action), dim=-1)
 
         self.state = self.embedding_net(x)
         output = self.auxiliary_net(self.state)
