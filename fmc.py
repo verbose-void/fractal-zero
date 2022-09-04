@@ -1,6 +1,7 @@
 
 import torch
 import numpy as np
+import networkx as nx
 
 
 @torch.no_grad()
@@ -44,7 +45,7 @@ def _get_virtual_rewards(rewards, distances, balance: float = 1):
 
 
 @torch.no_grad()
-def _do_state_cloning(dynamics_model, num_walkers: int, rewards, verbose: bool = False):
+def _clone_states(dynamics_model, num_walkers: int, rewards, verbose: bool = False):
     assert dynamics_model.state.shape == (num_walkers, dynamics_model.embedding_size)
 
     # prepare virtual rewards and partner virtual rewards
@@ -76,6 +77,27 @@ def _do_state_cloning(dynamics_model, num_walkers: int, rewards, verbose: bool =
     if verbose:
         print("state after", dynamics_model.state)
 
+    return clone_partners, clone_mask
+
+
+def _update_game_tree(game_tree: nx.Graph, step: int, actions, clone_partners, clone_mask, dynamics_model):
+    assert step > 0
+
+    num_walkers = dynamics_model.state.shape[0]
+
+    for walker_index in range(num_walkers):
+        node_name = f"state_w{walker_index}_s{step}"
+
+        cloned = clone_mask[walker_index]
+
+        if cloned:
+            # TODO: prune tree (remove all nodes/edges before)
+            continue
+
+        previous_node = 0 if step == 1 else f"state_w{walker_index}_s{step-1}"
+
+        game_tree.add_node(node_name)
+
 
 @torch.no_grad()
 def lookahead(initial_state, dynamics_model, k: int, num_walkers: int = 4):
@@ -84,19 +106,23 @@ def lookahead(initial_state, dynamics_model, k: int, num_walkers: int = 4):
     action_history = []
     reward_history = []
 
+    game_tree = nx.Graph()
+
+    # root
+    game_tree.add_node(0, state=initial_state)
+
     state = torch.zeros((num_walkers, *initial_state.shape))
     state[:] = initial_state
 
     dynamics_model.set_state(state)
 
-    for _ in range(k):
-        actions = _get_random_actions(dynamics_model, num_walkers)
+    for step in range(k):
+        actions = _get_random_actions(dynamics_model, num_walkers)  # TODO: introduce a policy function
         rewards = dynamics_model.forward(actions)
 
-        action_history.append(actions)
-        reward_history.append(rewards)
+        clone_partners, clone_mask = _clone_states(dynamics_model, num_walkers, rewards)
 
-        _do_state_cloning(dynamics_model, num_walkers, rewards)
+        _update_game_tree(game_tree, step + 1, actions, clone_partners, clone_mask, dynamics_model)
 
     # TODO: select the best action
     return action_history[0][0, 0].numpy()
