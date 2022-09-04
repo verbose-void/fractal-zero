@@ -26,10 +26,13 @@ if __name__ == "__main__":
         state = representation_model.forward(obs)
 
         # action = lookahead(state, dynamics_model, lookahead_steps)
-        action = FMC(num_walkers, dynamics_model, state).simulate(lookahead_steps)
+        fmc = FMC(num_walkers, dynamics_model, state)
+        action = fmc.simulate(lookahead_steps)
 
         obs, reward, done, info = env.step(action)
         print("reward", reward)
         if done:
             print('done')
             break
+
+        # fmc.render_best_walker_path()

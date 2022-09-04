@@ -163,10 +163,10 @@ class FMC:
         candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
 
         for walker_index in range(self.num_walkers):
-            cloned = self.clone_mask[walker_index]
-
+            
+            # TODO: prune tree (remove all nodes/edges before)
+            # cloned = self.clone_mask[walker_index]
             # if cloned:
-                # TODO: prune tree (remove all nodes/edges before)
                 # continue
 
             previous_node = self.walker_node_ids[walker_index].item()
@@ -180,18 +180,13 @@ class FMC:
 
         self.walker_node_ids[:] = candidate_walker_ids
 
-    @torch.no_grad()
-    def _pick_root_action(self):
+    def _determine_best_walker_path(self):
+        """The best walker path is based on the path through the game tree, beginning at the root and ending at *one* of the current walker's 
+        state nodes, that results in the highest sum of edge weights. In other words, it's the set of actions taken that resulted in the highest
+        cumulative reward.
+        """
+
         # TODO optimize this!
-
-        # print(self.game_tree)
-        # highest_weight_walker_path = nx.dag_longest_path(self.game_tree, weight="weight")
-
-        # edges = [(highest_weight_walker_path[i], highest_weight_walker_path[i+1]) for i in range(len(highest_weight_walker_path) - 1)]
-        # color_map = ['green' if node == self.root else 'black' for node in self.game_tree]
-        # edge_color = ['red' if edge in edges else "black" for edge in self.game_tree.edges]
-        # nx.draw(self.game_tree, node_color=color_map)#, edge_color=edge_color)
-        # plt.show()
 
         best_path = None
         lowest_distance = float("inf")
@@ -209,7 +204,14 @@ class FMC:
         if len(best_path) <= 1:
             raise ValueError(f"The best path length must be >= 2. Got: {best_path}.")
 
-        u, v = best_path[0], best_path[1]
+        self.best_path = best_path
+
+    @torch.no_grad()
+    def _pick_root_action(self):
+        """The root action is chosen based on the best path/trajectory taken by a walker in the game tree."""
+
+        self._determine_best_walker_path()
+        u, v = self.best_path[0], self.best_path[1]
 
         # sanity check
         if u != self.root:
@@ -217,3 +219,10 @@ class FMC:
 
         action = self.game_tree.edges[u, v]["action"]
         return action[0].numpy()
+
+    def render_best_walker_path(self):
+        edges = [(self.best_path[i], self.best_path[i+1]) for i in range(len(self.best_path) - 1)]
+        color_map = ['green' if node == self.root else 'black' for node in self.game_tree]
+        edge_color = ['red' if edge in edges else "black" for edge in self.game_tree.edges]
+        nx.draw(self.game_tree, node_color=color_map, edge_color=edge_color)
+        plt.show()
