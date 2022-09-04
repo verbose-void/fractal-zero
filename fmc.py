@@ -64,8 +64,7 @@ class FMC:
         # sanity check
         assert self.dynamics_model.state.shape == (self.num_walkers, self.dynamics_model.embedding_size)
 
-        # TODO return the actual best action taken at the root
-        return self.actions[0, 0].numpy() 
+        return self._pick_root_action()
 
     @torch.no_grad()
     def _assign_actions(self):
@@ -172,7 +171,22 @@ class FMC:
             new_node = candidate_walker_ids[walker_index].item()
 
             self.game_tree.add_node(new_node, state=self.dynamics_model.state[walker_index])
-            self.game_tree.add_edge(previous_node, new_node, action=self.actions[walker_index], weight=self.rewards[walker_index])
+
+            weight = self.rewards[walker_index].item()
+            self.game_tree.add_edge(previous_node, new_node, action=self.actions[walker_index], weight=weight)
 
         candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
         self.walker_node_ids[:] = candidate_walker_ids
+
+    @torch.no_grad()
+    def _pick_root_action(self):
+        # TODO return the actual best action taken at the root
+
+        # print(self.game_tree)
+        highest_weight_walker_path = nx.dag_longest_path(self.game_tree, weight="weight")
+
+        # sanity check
+        if highest_weight_walker_path[0] != self.root:
+            raise ValueError(f"The highest weight walker path is expected to begin at the root. Got: {highest_weight_walker_path}")
+        
+        return self.actions[0, 0].numpy()
