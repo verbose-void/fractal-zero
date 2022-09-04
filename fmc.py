@@ -3,7 +3,8 @@ import torch
 import numpy as np
 
 
-def get_random_actions(dynamics_model, n: int):
+@torch.no_grad()
+def _get_random_actions(dynamics_model, n: int):
     actions = []
     for _ in range(n):
         action = dynamics_model.action_space.sample()
@@ -11,14 +12,17 @@ def get_random_actions(dynamics_model, n: int):
     return torch.tensor(actions).unsqueeze(-1)
 
 
-def get_random_state_order(num_walkers: int):
+@torch.no_grad()
+def _get_clone_partners(num_walkers: int):
     return np.random.choice(np.arange(num_walkers), size=num_walkers)
 
 
-def get_distances(states, state_order):
-    return torch.linalg.norm(states - states[state_order], dim=1)
+@torch.no_grad()
+def _get_distances(states, clone_partners):
+    return torch.linalg.norm(states - states[clone_partners], dim=1)
     
     
+@torch.no_grad()
 def _relativize_vector(vector):
     std = vector.std()
     if std == 0:
@@ -29,7 +33,8 @@ def _relativize_vector(vector):
     return standard
 
 
-def get_virtual_rewards(rewards, distances, balance: float = 1):
+@torch.no_grad()
+def _get_virtual_rewards(rewards, distances, balance: float = 1):
     # TODO: reletivize
 
     activated_rewards = _relativize_vector(rewards.squeeze(-1))
@@ -39,14 +44,14 @@ def get_virtual_rewards(rewards, distances, balance: float = 1):
 
 
 @torch.no_grad()
-def do_state_cloning(dynamics_model, num_walkers: int, rewards, verbose: bool = False):
+def _do_state_cloning(dynamics_model, num_walkers: int, rewards, verbose: bool = False):
     assert dynamics_model.state.shape == (num_walkers, dynamics_model.embedding_size)
 
     # prepare virtual rewards and partner virtual rewards
-    state_order = get_random_state_order(num_walkers)
-    distances = get_distances(dynamics_model.state, state_order)
-    vr = get_virtual_rewards(rewards, distances)
-    pair_vr = vr[state_order]
+    clone_partners = _get_clone_partners(num_walkers)
+    distances = _get_distances(dynamics_model.state, clone_partners)
+    vr = _get_virtual_rewards(rewards, distances)
+    pair_vr = vr[clone_partners]
 
     # prepare clone mask
     clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
@@ -58,7 +63,7 @@ def do_state_cloning(dynamics_model, num_walkers: int, rewards, verbose: bool = 
         print()
         print()
         print('clone stats:')
-        print("state order", state_order)
+        print("state order", clone_partners)
         print("distances", distances)
         print("virtual rewards", vr)
         print("clone probabilities", clone_probabilities)
@@ -66,7 +71,7 @@ def do_state_cloning(dynamics_model, num_walkers: int, rewards, verbose: bool = 
         print("state before", dynamics_model.state)
 
     # execute clone
-    dynamics_model.state[clone_mask] = dynamics_model.state[state_order[clone_mask]]
+    dynamics_model.state[clone_mask] = dynamics_model.state[clone_partners[clone_mask]]
 
     if verbose:
         print("state after", dynamics_model.state)
@@ -85,13 +90,13 @@ def lookahead(initial_state, dynamics_model, k: int, num_walkers: int = 4):
     dynamics_model.set_state(state)
 
     for _ in range(k):
-        actions = get_random_actions(dynamics_model, num_walkers)
+        actions = _get_random_actions(dynamics_model, num_walkers)
         rewards = dynamics_model.forward(actions)
 
         action_history.append(actions)
         reward_history.append(rewards)
 
-        do_state_cloning(dynamics_model, num_walkers, rewards)
+        _do_state_cloning(dynamics_model, num_walkers, rewards)
 
     # TODO: select the best action
     return action_history[0][0, 0].numpy()
