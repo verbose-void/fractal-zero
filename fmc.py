@@ -94,6 +94,11 @@ class FMC:
     def _calculate_virtual_rewards(self):
         """For the cloning phase, we calculate a virtual reward that is the composite of each walker's distance to their partner weighted with
         their rewards. This is used to determine the probability to clone and is used to balance exploration and exploitation.
+
+        Both the reward and distance vectors are "relativized". This keeps all of the values in each vector contextually scaled with each step.
+        The authors of Fractal Monte Carlo claim this is a method of shaping a "universal reward function". Without relativization, the
+        vectors may have drastically different ranges, causing more volatility in how many walkers are cloned at each step. If the reward or distance
+        ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
         activated_rewards = _relativize_vector(self.rewards.squeeze(-1))
@@ -171,4 +176,3 @@ class FMC:
 
         candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
         self.walker_node_ids[:] = candidate_walker_ids
-        
