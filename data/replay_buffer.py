@@ -4,9 +4,9 @@ import numpy as np
 class GameHistory:
 
     def __init__(self, initial_observation):
-        self.actions = [None]
+        self.actions = [0]  # TODO: use the action shape
         self.observations = [initial_observation]
-        self.environment_reward_signals = [None]
+        self.environment_reward_signals = [0]
 
     def append(self, action, observation, environment_reward_signal):
         self.actions.append(action)

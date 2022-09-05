@@ -22,7 +22,7 @@ class DataHandler:
     def get_batch(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         observations = np.zeros((self.batch_size, *self.observation_shape), dtype=float)
         actions = np.zeros((self.batch_size, *self.action_shape), dtype=float)
-        rewards = np.zeros((self.batch_size, 1))
+        rewards = np.zeros((self.batch_size, 1), dtype=float)
         
         for i in range(self.batch_size):
             observation, action, reward = self.replay_buffer.sample()
@@ -31,4 +31,4 @@ class DataHandler:
             actions[i] = action
             rewards[i] = reward
 
-        return torch.tensor(observations), torch.tensor(actions), torch.tensor(rewards)
+        return torch.tensor(observations).float(), torch.tensor(actions).float(), torch.tensor(rewards)

@@ -39,6 +39,4 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
         x = torch.concat((self.state, action), dim=-1)
 
         self.state = self.embedding_net(x)
-        output = self.auxiliary_net(self.state)
-        
-        return output
+        return self.auxiliary_net(self.state)
