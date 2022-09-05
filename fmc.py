@@ -166,7 +166,7 @@ class FMC:
         candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
 
         for walker_index in range(self.num_walkers):
-            
+
             # TODO: prune tree (remove all nodes/edges before)
             # cloned = self.clone_mask[walker_index]
             # if cloned:

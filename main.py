@@ -4,8 +4,10 @@ import torch
 from fmc import FMC
 
 from models.dynamics import FullyConnectedDynamicsModel
+from models.joint_model import JointModel
 from models.representation import FullyConnectedRepresentationModel
 from replay_buffer import GameHistory, ReplayBuffer
+from trainer import Trainer
 
 
 def play_game(env, representation_model, dynamics_model) -> GameHistory:
@@ -33,8 +35,7 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
             print('done')
             break
 
-        env.render()
-
+        # env.render()
         # fmc.render_best_walker_path()
 
     return game_history
@@ -48,8 +49,10 @@ if __name__ == "__main__":
 
     representation_model =  FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(env, embedding_size, out_features=out_features)
+    joint_model = JointModel(representation_model, dynamics_model)
 
     replay_buffer = ReplayBuffer()
+    trainer = Trainer(replay_buffer, joint_model)
 
     num_games = 3
     for _ in range(num_games):
