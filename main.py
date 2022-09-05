@@ -1,12 +1,13 @@
 import gym
 
 import torch
+from data.data_handler import DataHandler
 from fmc import FMC
 
 from models.dynamics import FullyConnectedDynamicsModel
 from models.joint_model import JointModel
 from models.representation import FullyConnectedRepresentationModel
-from replay_buffer import GameHistory, ReplayBuffer
+from data.replay_buffer import GameHistory, ReplayBuffer
 from trainer import Trainer
 
 
@@ -52,7 +53,8 @@ if __name__ == "__main__":
     joint_model = JointModel(representation_model, dynamics_model)
 
     replay_buffer = ReplayBuffer()
-    trainer = Trainer(replay_buffer, joint_model)
+    data_handler = DataHandler(env, replay_buffer)
+    trainer = Trainer(data_handler, joint_model)
 
     num_games = 3
     for _ in range(num_games):
@@ -60,5 +62,6 @@ if __name__ == "__main__":
         print(game_history)
         replay_buffer.append(game_history)
         
+    trainer.train_step()
 
         

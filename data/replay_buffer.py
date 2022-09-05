@@ -1,3 +1,4 @@
+import numpy as np
 
 
 class GameHistory:
@@ -12,6 +13,14 @@ class GameHistory:
         self.observations.append(observation)
         self.environment_reward_signals.append(environment_reward_signal)
 
+    def __getitem__(self, index: int):
+        return (self.observations[index], self.actions[index], self.environment_reward_signals[index])
+
+    def __len__(self):
+        if len(self.observations) == len(self.actions) == len(self.environment_reward_signals):
+            return len(self.observations)
+        raise ValueError(str(self))
+
     def __str__(self):
         return f"GameHistory(num_actions={len(self.actions)}, num_observation={len(self.observations)}, num_rewards={len(self.environment_reward_signals)})"
 
@@ -22,3 +31,11 @@ class ReplayBuffer:
 
     def append(self, game_history: GameHistory):
         self.game_histories.append(game_history)
+
+    def sample(self) -> tuple:
+        game_index = np.random.randint(0, len(self.game_histories))
+        game_history = self.game_histories[game_index]
+        frame_index = np.random.randint(0, len(game_history))
+        return game_history[frame_index]
+
+

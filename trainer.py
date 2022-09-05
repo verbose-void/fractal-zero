@@ -1,10 +1,11 @@
 import torch
-from replay_buffer import ReplayBuffer
+from data.data_handler import DataHandler
+from data.replay_buffer import ReplayBuffer
 
 
 class Trainer:
-    def __init__(self, replay_buffer: ReplayBuffer, model):
-        self.replay_buffer = replay_buffer
+    def __init__(self, data_handler: DataHandler, model):
+        self.data_handler = data_handler
 
         self.model = model
 
@@ -12,4 +13,5 @@ class Trainer:
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01)
 
     def train_step(self):
-        pass
+        observations, actions, rewards = self.data_handler.get_batch()
+        print(observations.shape, actions.shape, rewards.shape)
