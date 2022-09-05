@@ -64,6 +64,9 @@ class FMC:
         # sanity check
         assert self.dynamics_model.state.shape == (self.num_walkers, self.dynamics_model.embedding_size)
 
+        # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
+        # TODO: backpropagate reward to estimate a value function?
+
         return self._pick_root_action()
 
     @torch.no_grad()
@@ -187,6 +190,7 @@ class FMC:
         """
 
         # TODO optimize this!
+        # TODO: we might not need to store the entire tree, but rather just store the action that was taken at the root for each walker.
 
         best_path = None
         lowest_distance = float("inf")
