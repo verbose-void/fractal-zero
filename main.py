@@ -5,22 +5,7 @@ from fmc import FMC
 
 from models.dynamics import FullyConnectedDynamicsModel
 from models.representation import FullyConnectedRepresentationModel
-
-
-class GameHistory:
-
-    def __init__(self, initial_observation):
-        self.actions = [None]
-        self.observations = [initial_observation]
-        self.rewards = [None]
-
-    def append(self, action, observation, reward):
-        self.actions.append(action)
-        self.observations.append(observation)
-        self.rewards.append(reward)
-
-    def __str__(self):
-        return f"GameHistory(num_actions={len(self.actions)}, num_observation={len(self.observations)}, num_rewards={len(self.rewards)})"
+from replay_buffer import GameHistory, ReplayBuffer
 
 
 def play_game(env, representation_model, dynamics_model) -> GameHistory:
@@ -48,6 +33,8 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
             print('done')
             break
 
+        env.render()
+
         # fmc.render_best_walker_path()
 
     return game_history
@@ -62,7 +49,13 @@ if __name__ == "__main__":
     representation_model =  FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(env, embedding_size, out_features=out_features)
 
-    game_history = play_game(env, representation_model, dynamics_model)
-    print(game_history)
+    replay_buffer = ReplayBuffer()
+
+    num_games = 3
+    for _ in range(num_games):
+        game_history = play_game(env, representation_model, dynamics_model)
+        print(game_history)
+        replay_buffer.append(game_history)
+        
 
         
