@@ -1,11 +1,12 @@
-
 import torch
 import numpy as np
 import networkx as nx
 
 import matplotlib.pyplot as plt
 
-    
+from models.joint_model import JointModel
+
+
 @torch.no_grad()
 def _relativize_vector(vector):
     std = vector.std()
@@ -15,6 +16,7 @@ def _relativize_vector(vector):
     standard[standard > 0] = torch.log(1 + standard[standard > 0]) + 1
     standard[standard <= 0] = torch.exp(standard[standard <= 0])
     return standard
+
 
 class FMC:
     """Fractal Monte Carlo is a collaborative cellular automata based tree search algorithm. This version is special, because instead of having a gym
@@ -26,21 +28,42 @@ class FMC:
     approach, it's natively vectorized so it can be put onto the GPU.
     """
 
-    def __init__(self, num_walkers: int, dynamics_model, initial_state, balance: float = 1, verbose: bool = False):
+    def __init__(
+        self,
+        num_walkers: int,
+        model: JointModel,
+        initial_state,
+        balance: float = 1,
+        verbose: bool = False,
+        gamma: float = 0.99,
+    ):
         self.num_walkers = num_walkers
         self.balance = balance
         self.verbose = verbose
+        self.gamma = gamma
 
-        self.state = torch.zeros((num_walkers, *initial_state.shape))
-        self.state[:] = initial_state
+        self.model = model
 
-        self.root = 0
-        self.game_tree = nx.DiGraph()
-        self.game_tree.add_node(self.root, state=initial_state)
-        self.walker_node_ids = torch.zeros(self.num_walkers, dtype=torch.long)
+        # set the initial states for all walkers
+        batched_initial_state = torch.zeros((num_walkers, *initial_state.shape), device=self.device)
+        batched_initial_state[:] = initial_state
+        self.dynamics_model.set_state(batched_initial_state)
 
-        self.dynamics_model = dynamics_model
-        self.dynamics_model.set_state(self.state)
+    @property
+    def device(self):
+        return self.model.device
+
+    @property
+    def state(self):
+        return self.dynamics_model.state
+
+    @property
+    def dynamics_model(self):
+        return self.model.dynamics_model
+
+    @property
+    def prediction_model(self):
+        return self.model.prediction_model
 
     @torch.no_grad()
     def _perturbate(self):
@@ -48,49 +71,76 @@ class FMC:
 
         self._assign_actions()
         self.rewards = self.dynamics_model.forward(self.actions)
+        _, self.predicted_values = self.prediction_model.forward(self.state)
+
+        self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
     @torch.no_grad()
     def simulate(self, k: int):
         """Run FMC for k iterations, returning the best action that was taken at the root/initial state."""
 
-        for _ in range(k):
+        self.k = k
+        assert self.k > 0
+
+        # TODO: explain all these variables
+        self.reward_buffer = torch.zeros(
+            size=(self.num_walkers, self.k, 1), dtype=float, device=self.device
+        )
+        self.value_sum_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=float, device=self.device)
+        self.visit_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=int, device=self.device)
+        self.root_actions = None
+        self.root_value_sum = 0
+        self.root_visits = 0
+
+        for self.simulation_iteration in range(self.k):
             self._perturbate()
-            self._clone_states()
-            self._update_game_tree()
+            self._prepare_clone_variables()
+            self._backpropagate_reward_buffer()
+            self._execute_cloning()
 
             # nx.draw(self.game_tree)
             # plt.show()
 
         # sanity check
-        assert self.dynamics_model.state.shape == (self.num_walkers, self.dynamics_model.embedding_size)
+        assert self.state.shape == (
+            self.num_walkers,
+            self.dynamics_model.embedding_size,
+        )
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
-        # TODO: backpropagate reward to estimate a value function?
 
-        return self._pick_root_action()
+        return self._get_highest_value_action()
 
     @torch.no_grad()
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
-        # TODO: policy function?
+        # TODO: use the policy function for action selection.
         actions = []
         for _ in range(self.num_walkers):
             action = self.dynamics_model.action_space.sample()
             actions.append(action)
-        self.actions = torch.tensor(actions).unsqueeze(-1)
+        self.actions = torch.tensor(actions, device=self.device).unsqueeze(-1)
+
+        if self.root_actions is None:
+            self.root_actions = torch.tensor(self.actions, device=self.device)
 
     @torch.no_grad()
     def _assign_clone_partners(self):
         """For the cloning phase, walkers need a partner to determine if they should be sent as reinforcements to their partner's state."""
-            
-        self.clone_partners = np.random.choice(np.arange(self.num_walkers), size=self.num_walkers)
+
+        choices = np.random.choice(
+            np.arange(self.num_walkers), size=self.num_walkers
+        )
+        self.clone_partners = torch.tensor(choices, dtype=int, device=self.device)
 
     @torch.no_grad()
     def _calculate_distances(self):
         """For the cloning phase, we calculate the distances between each walker and their partner for balancing exploration."""
 
-        self.distances = torch.linalg.norm(self.state - self.state[self.clone_partners], dim=1)
+        self.distances = torch.linalg.norm(
+            self.state - self.state[self.clone_partners], dim=1
+        )
 
     @torch.no_grad()
     def _calculate_virtual_rewards(self):
@@ -103,10 +153,10 @@ class FMC:
         ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
-        activated_rewards = _relativize_vector(self.rewards.squeeze(-1))
+        activated_values = _relativize_vector(self.predicted_values).squeeze(-1)
         activated_distances = _relativize_vector(self.distances)
 
-        self.virtual_rewards = activated_rewards * activated_distances ** self.balance
+        self.virtual_rewards = activated_values * activated_distances ** self.balance
 
     @torch.no_grad()
     def _determine_clone_mask(self):
@@ -122,13 +172,8 @@ class FMC:
         self.clone_mask = self.clone_probabilities >= r
 
     @torch.no_grad()
-    def _clone_states(self):
-        """The cloning phase is where the collaboration of the cellular automata comes from. Using the virtual rewards calculated for
-        each walker and clone partners that are randomly assigned, there is a probability that some walkers will be sent as reinforcements
-        to their randomly assigned clone partner.
-
-        The goal of the clone phase is to maintain a balanced density over state occupations with respect to exploration and exploitation.   
-        """
+    def _prepare_clone_variables(self):
+        # TODO: docstring
 
         # prepare virtual rewards and partner virtual rewards
         self._assign_clone_partners()
@@ -136,97 +181,94 @@ class FMC:
         self._calculate_virtual_rewards()
         self._determine_clone_mask()
 
+    @torch.no_grad()
+    def _execute_cloning(self):
+        """The cloning phase is where the collaboration of the cellular automata comes from. Using the virtual rewards calculated for
+        each walker and clone partners that are randomly assigned, there is a probability that some walkers will be sent as reinforcements
+        to their randomly assigned clone partner.
 
-        # TODO: don't clone best walker
+        The goal of the clone phase is to maintain a balanced density over state occupations with respect to exploration and exploitation.
+        """
+
+        # TODO: don't clone best walker (?)
         if self.verbose:
             print()
             print()
-            print('clone stats:')
+            print("clone stats:")
             print("state order", self.clone_partners)
             print("distances", self.distances)
             print("virtual rewards", self.virtual_rewards)
             print("clone probabilities", self.clone_probabilities)
             print("clone mask", self.clone_mask)
-            print("state before", self.dynamics_model.state)
+            print("state before", self.state)
 
-        # execute clone
-        self.dynamics_model.state[self.clone_mask] = self.dynamics_model.state[self.clone_partners[self.clone_mask]]
-        self.actions[self.clone_mask] = self.actions[self.clone_partners[self.clone_mask]]
+        # execute clones
+        self._clone_vector(self.state)
+        self._clone_vector(self.actions)
+        self._clone_vector(self.root_actions)
+        self._clone_vector(self.reward_buffer)
+        self._clone_vector(self.value_sum_buffer)
+        self._clone_vector(self.visit_buffer)
 
         if self.verbose:
-            print("state after", self.dynamics_model.state)
+            print("state after", self.state)
 
-    @torch.no_grad()
-    def _update_game_tree(self):
-        """A tree of walker trajectories is maintained so that after the simulation is complete, we can analyze the actions
-        taken and choose the best trajectory according to the reward estimations.
+    def _backpropagate_reward_buffer(self):
+        """This essentially does the backpropagate step that MCTS does, although instead of maintaining an entire tree, it maintains
+        value sums and visit counts for each walker. These values may be subsequently cloned. There is some information loss
+        during this clone, but it should be minimally impactful.
         """
 
-        candidate_walker_ids = torch.randint(1, 9999999, (self.num_walkers,))
-        candidate_walker_ids[self.clone_mask] = candidate_walker_ids[self.clone_partners[self.clone_mask]]
+        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
+        # to backpropagate the value regardless of if they are cloning or not.
+        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
+        backpropagate_all = self.simulation_iteration == self.k - 1
 
-        for walker_index in range(self.num_walkers):
+        mask = (
+            torch.ones_like(self.clone_mask) if backpropagate_all else self.clone_mask
+        )
 
-            # TODO: prune tree (remove all nodes/edges before)
-            # cloned = self.clone_mask[walker_index]
-            # if cloned:
-                # continue
+        current_value_buffer = torch.zeros_like(self.value_sum_buffer)
+        for i in reversed(range(self.simulation_iteration)):
+            current_value_buffer[mask] = (
+                self.reward_buffer[mask, i] + current_value_buffer[mask] * self.gamma
+            )
 
-            previous_node = self.walker_node_ids[walker_index].item()
-            new_node = candidate_walker_ids[walker_index].item()
+        self.value_sum_buffer += current_value_buffer
+        self.visit_buffer += mask.unsqueeze(-1)
 
-            self.game_tree.add_node(new_node, state=self.dynamics_model.state[walker_index])
+        self.root_value_sum += current_value_buffer.sum()
+        self.root_visits += mask.sum()
 
-            weight = self.rewards[walker_index].item()
-            path_weight = 9999999 - weight
-            self.game_tree.add_edge(previous_node, new_node, action=self.actions[walker_index], weight=weight, path_weight=path_weight)
+    @property
+    def root_value(self):
+        """Kind of equivalent to the MCTS root value."""
 
-        self.walker_node_ids[:] = candidate_walker_ids
-
-    def _determine_best_walker_path(self):
-        """The best walker path is based on the path through the game tree, beginning at the root and ending at *one* of the current walker's 
-        state nodes, that results in the highest sum of edge weights. In other words, it's the set of actions taken that resulted in the highest
-        cumulative reward.
-        """
-
-        # TODO optimize this!
-        # TODO: we might not need to store the entire tree, but rather just store the action that was taken at the root for each walker.
-
-        best_path = None
-        lowest_distance = float("inf")
-
-        for walker_index in range(self.num_walkers):
-            walker_node = self.walker_node_ids[walker_index].item()
-
-            # find longest path between root and current walker node
-            distance, path = nx.single_source_dijkstra(self.game_tree, self.root, walker_node, weight="path_weight")
-
-            if distance < lowest_distance:
-                lowest_distance = distance
-                best_path = path
-
-        if len(best_path) <= 1:
-            raise ValueError(f"The best path length must be >= 2. Got: {best_path}.")
-
-        self.best_path = best_path
+        return (self.root_value_sum / self.root_visits).item()
 
     @torch.no_grad()
-    def _pick_root_action(self):
-        """The root action is chosen based on the best path/trajectory taken by a walker in the game tree."""
+    def _get_highest_value_action(self):
+        """The highest value action corresponds to the walker whom has the highest average estimated value."""
 
-        self._determine_best_walker_path()
-        u, v = self.best_path[0], self.best_path[1]
+        self.walker_values = self.value_sum_buffer / self.visit_buffer
+        highest_value_walker_index = torch.argmax(self.walker_values)
+        highest_value_action = self.root_actions[highest_value_walker_index, 0].cpu().numpy()
 
-        # sanity check
-        if u != self.root:
-            raise ValueError(f"The first node in the selected path is expected to be the root node ({self.root}), instead got: {u}.")
-
-        action = self.game_tree.edges[u, v]["action"]
-        return action[0].numpy()
+        return highest_value_action
 
     def render_best_walker_path(self):
-        edges = [(self.best_path[i], self.best_path[i+1]) for i in range(len(self.best_path) - 1)]
-        color_map = ['green' if node == self.root else 'black' for node in self.game_tree]
-        edge_color = ['red' if edge in edges else "black" for edge in self.game_tree.edges]
+        edges = [
+            (self.best_path[i], self.best_path[i + 1])
+            for i in range(len(self.best_path) - 1)
+        ]
+        color_map = [
+            "green" if node == self.root else "black" for node in self.game_tree
+        ]
+        edge_color = [
+            "red" if edge in edges else "black" for edge in self.game_tree.edges
+        ]
         nx.draw(self.game_tree, node_color=color_map, edge_color=edge_color)
         plt.show()
+
+    def _clone_vector(self, vector: torch.Tensor):
+        vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
