@@ -6,6 +6,7 @@ from fmc import FMC
 
 from models.dynamics import FullyConnectedDynamicsModel
 from models.joint_model import JointModel
+from models.prediction import FullyConnectedPredictionModel
 from models.representation import FullyConnectedRepresentationModel
 from data.replay_buffer import GameHistory, ReplayBuffer
 from trainer import Trainer
@@ -54,7 +55,8 @@ if __name__ == "__main__":
 
     representation_model =  FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(env, embedding_size, out_features=out_features)
-    joint_model = JointModel(representation_model, dynamics_model)
+    prediction_model = FullyConnectedPredictionModel(env, embedding_size)
+    joint_model = JointModel(representation_model, dynamics_model, prediction_model)
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer)

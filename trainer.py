@@ -28,8 +28,14 @@ class Trainer:
 
         hidden_states = self.model.representation_model(observations)
 
+        # TODO: unroll model from initial hidden state
+
         self.model.dynamics_model.set_state(hidden_states)
         reward_predictions = self.model.dynamics_model(actions)
+
+        policy_logits, value_predictions = self.model.prediction_model(self.model.dynamics_model.state)
+
+        print(value_predictions)
 
         reward_loss = F.mse_loss(reward_predictions, reward_targets)
         reward_loss.backward()
