@@ -32,11 +32,11 @@ class Trainer:
         reward_loss = F.mse_loss(reward_predictions, reward_targets)
         reward_loss.backward()
 
-        print(observations.shape, actions.shape, reward_targets.shape)
-        print(reward_predictions)
-        print(reward_targets)
-        print(reward_loss.item())
+        # print(observations.shape, actions.shape, reward_targets.shape)
+        # print(reward_predictions)
+        # print(reward_targets)
+        # print(reward_loss.item())
 
-        wandb.log({"reward_loss": reward_loss.item()})
+        wandb.log({"reward_loss": reward_loss.item(), "mean_reward_targets": torch.mean(reward_targets)})
 
         self.optimizer.step()

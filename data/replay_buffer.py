@@ -26,11 +26,22 @@ class GameHistory:
 
 
 class ReplayBuffer:
-    def __init__(self):
+    def __init__(self, max_size: int):
+        # TODO: prioritized experience replay (PER) https://arxiv.org/abs/1511.05952
+
+        self.max_size = max_size
+
         self.game_histories = []
 
     def append(self, game_history: GameHistory):
+        if len(self) >= self.max_size:
+            # first in, first out.
+            self.game_histories.pop(0)
+
         self.game_histories.append(game_history)
+
+        if len(self) > self.max_size:
+            raise ValueError
 
     def sample(self) -> tuple:
         game_index = np.random.randint(0, len(self.game_histories))
@@ -38,4 +49,5 @@ class ReplayBuffer:
         frame_index = np.random.randint(0, len(game_history))
         return game_history[frame_index]
 
-
+    def __len__(self):
+        return len(self.game_histories)

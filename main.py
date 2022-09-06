@@ -10,6 +10,8 @@ from models.representation import FullyConnectedRepresentationModel
 from data.replay_buffer import GameHistory, ReplayBuffer
 from trainer import Trainer
 
+from tqdm import tqdm
+
 
 def play_game(env, representation_model, dynamics_model) -> GameHistory:
     obs = env.reset()
@@ -31,9 +33,9 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
 
         game_history.append(action, obs, reward)
 
-        print("reward", reward)
+        # print("reward", reward)
         if done:
-            print('done')
+            # print('done')
             break
 
         # env.render()
@@ -45,6 +47,8 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
 if __name__ == "__main__":
     env = gym.make('CartPole-v0')
 
+    max_replay_buffer_size = 128
+
     embedding_size = 16
     out_features = 1
 
@@ -52,16 +56,17 @@ if __name__ == "__main__":
     dynamics_model = FullyConnectedDynamicsModel(env, embedding_size, out_features=out_features)
     joint_model = JointModel(representation_model, dynamics_model)
 
-    replay_buffer = ReplayBuffer()
+    replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer)
     trainer = Trainer(data_handler, joint_model)
 
-    num_games = 100
-    for _ in range(num_games):
+    num_games = 1024
+    train_every = 32
+
+    for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
         game_history = play_game(env, representation_model, dynamics_model)
-        print(game_history)
+        # print(game_history)
         replay_buffer.append(game_history)
-        
-    train_steps = 100
-    for _ in range(train_steps):
-        trainer.train_step()
+
+        if i % train_every == 0:
+            trainer.train_step()
