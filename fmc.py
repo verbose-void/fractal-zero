@@ -183,26 +183,13 @@ class FMC:
             print("clone mask", self.clone_mask)
             print("state before", self.dynamics_model.state)
 
-        # execute clone
-        self.dynamics_model.state[self.clone_mask] = self.dynamics_model.state[
-            self.clone_partners[self.clone_mask]
-        ]
-        self.actions[self.clone_mask] = self.actions[
-            self.clone_partners[self.clone_mask]
-        ]
-
-        self.root_actions[self.clone_mask] = self.root_actions[
-            self.clone_partners[self.clone_mask]
-        ]
-        self.reward_buffer[self.clone_mask] = self.reward_buffer[
-            self.clone_partners[self.clone_mask]
-        ]
-        self.value_sum_buffer[self.clone_mask] = self.value_sum_buffer[
-            self.clone_partners[self.clone_mask]
-        ]
-        self.visit_buffer[self.clone_mask] = self.visit_buffer[
-            self.clone_partners[self.clone_mask]
-        ]
+        # execute clones
+        self._clone_vector(self.dynamics_model.state)
+        self._clone_vector(self.actions)
+        self._clone_vector(self.root_actions)
+        self._clone_vector(self.reward_buffer)
+        self._clone_vector(self.value_sum_buffer)
+        self._clone_vector(self.visit_buffer)
 
         if self.verbose:
             print("state after", self.dynamics_model.state)
@@ -263,3 +250,6 @@ class FMC:
         ]
         nx.draw(self.game_tree, node_color=color_map, edge_color=edge_color)
         plt.show()
+
+    def _clone_vector(self, vector: torch.Tensor):
+        vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
