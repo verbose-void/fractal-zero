@@ -67,9 +67,7 @@ class FMC:
         for self.simulation_iteration in range(self.k):
             self._perturbate()
             self._prepare_clone_variables()
-
             self._backpropagate_reward_buffer()
-
             self._execute_cloning()
 
             # self._update_game_tree()
@@ -89,8 +87,13 @@ class FMC:
         # return self._pick_root_action()
 
         print(self.root_value, self.root_visits, self.root_value / self.root_visits)
+        print(self.root_actions)
 
-        return self.actions[0, 0].numpy()  # TODO
+        highest_value_walker_index = torch.argmax(self.value_buffer)
+        highest_value_action = self.root_actions[highest_value_walker_index, 0].numpy()
+
+        # return self.actions[0, 0].numpy()  # TODO
+        return highest_value_action
 
     @torch.no_grad()
     def _assign_actions(self):
@@ -129,7 +132,7 @@ class FMC:
         ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
-        activated_rewards = _relativize_vector(self.rewards.squeeze(-1))
+        activated_rewards = _relativize_vector(self.rewards.squeeze(-1))  # TODO: instead of using rewards, use value estimations?
         activated_distances = _relativize_vector(self.distances)
 
         self.virtual_rewards = activated_rewards * activated_distances ** self.balance
@@ -196,11 +199,11 @@ class FMC:
         mask = torch.ones_like(self.clone_mask) if backpropagate_all else self.clone_mask
         self.root_visits += mask.sum()
 
-        value_buffer = torch.zeros(size=(self.num_walkers, 1))
+        self.value_buffer = torch.zeros(size=(self.num_walkers, 1))
         for i in reversed(range(self.simulation_iteration)):
-            value_buffer[mask] = self.reward_buffer[mask, i] + value_buffer[mask] * self.gamma
+            self.value_buffer[mask] = self.reward_buffer[mask, i] + self.value_buffer[mask] * self.gamma
 
-        self.root_value += value_buffer.sum()
+        self.root_value += self.value_buffer.sum()
 
 
     # @torch.no_grad()
