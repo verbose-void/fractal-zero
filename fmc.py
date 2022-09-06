@@ -76,14 +76,7 @@ class FMC:
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
         
-        # TODO: backpropagate reward to estimate a value function?
-        # NOTE: for each FMC simulation, we only need to store the value of the root. so the entire simulation collapses into a single point
-        # to determine the root node's approximate value.
-
-        self.walker_values = self.value_sum_buffer / self.visit_buffer
-        highest_value_walker_index = torch.argmax(self.walker_values)
-        highest_value_action = self.root_actions[highest_value_walker_index, 0].numpy()
-        return highest_value_action
+        return self._get_highest_value_action()
 
     @torch.no_grad()
     def _assign_actions(self):
@@ -184,7 +177,14 @@ class FMC:
             print("state after", self.dynamics_model.state)
 
     def _backpropagate_reward_buffer(self):
-        # TODO: explain backpropagate all
+        """This essentially does the backpropagate step that MCTS does, although instead of maintaining an entire tree, it maintains
+        value sums and visit counts for each walker. These values may be subsequently cloned. There is some information loss
+        during this clone, but it should be minimally impactful.
+        """
+
+        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
+        # to backpropagate the value regardless of if they are cloning or not.
+        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
         backpropagate_all = self.simulation_iteration == self.k-1
 
         mask = torch.ones_like(self.clone_mask) if backpropagate_all else self.clone_mask
@@ -201,7 +201,19 @@ class FMC:
 
     @property
     def root_value(self):
+        """Kind of equivalent to the MCTS root value."""
+
         return self.root_value_sum / self.root_visits
+
+    @torch.no_grad()
+    def _get_highest_value_action(self):
+        """The highest value action corresponds to the walker whom has the highest average estimated value."""
+
+        self.walker_values = self.value_sum_buffer / self.visit_buffer
+        highest_value_walker_index = torch.argmax(self.walker_values)
+        highest_value_action = self.root_actions[highest_value_walker_index, 0].numpy()
+
+        return highest_value_action
 
     def render_best_walker_path(self):
         edges = [(self.best_path[i], self.best_path[i+1]) for i in range(len(self.best_path) - 1)]
