@@ -35,17 +35,13 @@ class Trainer:
 
         policy_logits, value_predictions = self.model.prediction_model(self.model.dynamics_model.state)
 
-        print(value_predictions)
-
         reward_loss = F.mse_loss(reward_predictions, reward_targets)
-        reward_loss.backward()
+        value_loss = F.mse_loss(value_predictions, value_targets)
 
-        # print(observations.shape, actions.shape, reward_targets.shape)
-        # print(reward_predictions)
-        # print(reward_targets)
-        # print(reward_loss.item())
+        cum_loss = reward_loss + value_loss
+        cum_loss.backward()
 
         if self.use_wandb:
-            wandb.log({"reward_loss": reward_loss.item(), "mean_reward_targets": torch.mean(reward_targets)})
+            wandb.log({"reward_loss": reward_loss.item(), "mean_reward_targets": torch.mean(reward_targets), "value_loss": value_loss.item(), "cum_loss": cum_loss.item(), "mean_value_targets": value_targets.mean()})
 
         self.optimizer.step()

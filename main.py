@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer)
-    trainer = Trainer(data_handler, joint_model)
+    trainer = Trainer(data_handler, joint_model, use_wandb=True)
 
     num_games = 1024
     train_every = 32
