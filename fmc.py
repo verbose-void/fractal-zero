@@ -26,10 +26,11 @@ class FMC:
     approach, it's natively vectorized so it can be put onto the GPU.
     """
 
-    def __init__(self, num_walkers: int, dynamics_model, initial_state, balance: float = 1, verbose: bool = False):
+    def __init__(self, num_walkers: int, dynamics_model, initial_state, balance: float = 1, verbose: bool = False, gamma: float = 0.99):
         self.num_walkers = num_walkers
         self.balance = balance
         self.verbose = verbose
+        self.gamma = gamma
 
         self.state = torch.zeros((num_walkers, *initial_state.shape))
         self.state[:] = initial_state
@@ -55,18 +56,19 @@ class FMC:
     def simulate(self, k: int):
         """Run FMC for k iterations, returning the best action that was taken at the root/initial state."""
 
-        assert k > 0
+        self.k = k
+        assert self.k > 0
 
-        self.reward_buffer = torch.zeros(size=(self.num_walkers, k, 1))
+        self.reward_buffer = torch.zeros(size=(self.num_walkers, self.k, 1))
         self.root_actions = None
+        self.root_value = 0
+        self.root_visits = 0
 
-        for self.simulation_iteration in range(k):
+        for self.simulation_iteration in range(self.k):
             self._perturbate()
             self._prepare_clone_variables()
 
-            # TODO: explain backpropagate all
-            backpropagate_all = self.simulation_iteration == k-1
-            # self._backpropagate_reward_buffer(backpropagate_all=backpropagate_all)
+            self._backpropagate_reward_buffer()
 
             self._execute_cloning()
 
@@ -85,6 +87,9 @@ class FMC:
         # to determine the root node's approximate value.
 
         # return self._pick_root_action()
+
+        print(self.root_value, self.root_visits, self.root_value / self.root_visits)
+
         return self.actions[0, 0].numpy()  # TODO
 
     @torch.no_grad()
@@ -182,10 +187,21 @@ class FMC:
         if self.verbose:
             print("state after", self.dynamics_model.state)
 
-    def _backpropagate_reward_buffer(self, backpropagate_all: bool = False):
-
+    def _backpropagate_reward_buffer(self):
         # TODO: only "backpropagate" reward histories for the walkers who's clone mask value is True.
-        pass
+        # TODO: explain backpropagate all
+
+        backpropagate_all = self.simulation_iteration == self.k-1
+
+        mask = torch.ones_like(self.clone_mask) if backpropagate_all else self.clone_mask
+        self.root_visits += mask.sum()
+
+        value_buffer = torch.zeros(size=(self.num_walkers, 1))
+        for i in reversed(range(self.simulation_iteration)):
+            value_buffer[mask] = self.reward_buffer[mask, i] + value_buffer[mask] * self.gamma
+
+        self.root_value += value_buffer.sum()
+
 
     # @torch.no_grad()
     # def _update_game_tree(self):
