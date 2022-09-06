@@ -45,13 +45,21 @@ class FMC:
         self.model = model
 
         # set the initial states for all walkers
-        self.state = torch.zeros((num_walkers, *initial_state.shape))
-        self.state[:] = initial_state
-        self.dynamics_model.set_state(self.state)
+        batched_initial_state = torch.zeros((num_walkers, *initial_state.shape))
+        batched_initial_state[:] = initial_state
+        self.dynamics_model.set_state(batched_initial_state)
+
+    @property
+    def state(self):
+        return self.dynamics_model.state
 
     @property
     def dynamics_model(self):
         return self.model.dynamics_model
+
+    @property
+    def prediction_model(self):
+        return self.model.prediction_model
 
     @torch.no_grad()
     def _perturbate(self):
@@ -59,6 +67,7 @@ class FMC:
 
         self._assign_actions()
         self.rewards = self.dynamics_model.forward(self.actions)
+        _, self.predicted_values = self.prediction_model.forward(self.state)
 
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
@@ -89,7 +98,7 @@ class FMC:
             # plt.show()
 
         # sanity check
-        assert self.dynamics_model.state.shape == (
+        assert self.state.shape == (
             self.num_walkers,
             self.dynamics_model.embedding_size,
         )
@@ -139,12 +148,10 @@ class FMC:
         ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
-        activated_rewards = _relativize_vector(
-            self.rewards.squeeze(-1)
-        )  # TODO: instead of using rewards, use value estimations?
+        activated_values = _relativize_vector(self.predicted_values).squeeze(-1)
         activated_distances = _relativize_vector(self.distances)
 
-        self.virtual_rewards = activated_rewards * activated_distances**self.balance
+        self.virtual_rewards = activated_values * activated_distances ** self.balance
 
     @torch.no_grad()
     def _determine_clone_mask(self):
@@ -188,10 +195,10 @@ class FMC:
             print("virtual rewards", self.virtual_rewards)
             print("clone probabilities", self.clone_probabilities)
             print("clone mask", self.clone_mask)
-            print("state before", self.dynamics_model.state)
+            print("state before", self.state)
 
         # execute clones
-        self._clone_vector(self.dynamics_model.state)
+        self._clone_vector(self.state)
         self._clone_vector(self.actions)
         self._clone_vector(self.root_actions)
         self._clone_vector(self.reward_buffer)
@@ -199,7 +206,7 @@ class FMC:
         self._clone_vector(self.visit_buffer)
 
         if self.verbose:
-            print("state after", self.dynamics_model.state)
+            print("state after", self.state)
 
     def _backpropagate_reward_buffer(self):
         """This essentially does the backpropagate step that MCTS does, although instead of maintaining an entire tree, it maintains
