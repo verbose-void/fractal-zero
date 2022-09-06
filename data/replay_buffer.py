@@ -7,14 +7,16 @@ class GameHistory:
         self.actions = [0]  # TODO: use the action shape
         self.observations = [initial_observation]
         self.environment_reward_signals = [0]
+        self.values = [0]
 
-    def append(self, action, observation, environment_reward_signal):
+    def append(self, action, observation, environment_reward_signal, value):
         self.actions.append(action)
         self.observations.append(observation)
         self.environment_reward_signals.append(environment_reward_signal)
+        self.values.append(value)
 
     def __getitem__(self, index: int):
-        return (self.observations[index], self.actions[index], self.environment_reward_signals[index])
+        return (self.observations[index], self.actions[index], self.environment_reward_signals[index], self.values[index])
 
     def __len__(self):
         if len(self.observations) == len(self.actions) == len(self.environment_reward_signals):

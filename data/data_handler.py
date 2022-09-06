@@ -23,12 +23,14 @@ class DataHandler:
         observations = np.zeros((self.batch_size, *self.observation_shape), dtype=float)
         actions = np.zeros((self.batch_size, *self.action_shape), dtype=float)
         rewards = np.zeros((self.batch_size, 1), dtype=float)
+        values = np.zeros((self.batch_size, 1), dtype=float)
         
         for i in range(self.batch_size):
-            observation, action, reward = self.replay_buffer.sample()
+            observation, action, reward, value = self.replay_buffer.sample()
 
             observations[i] = observation
             actions[i] = action
             rewards[i] = reward
+            values[i] = value
 
-        return torch.tensor(observations).float(), torch.tensor(actions).float(), torch.tensor(rewards).float()
+        return torch.tensor(observations).float(), torch.tensor(actions).float(), torch.tensor(rewards).float(), torch.tensor(values).float()

@@ -24,7 +24,7 @@ class Trainer:
     def train_step(self):
         self.optimizer.zero_grad()
 
-        observations, actions, reward_targets = self.data_handler.get_batch()
+        observations, actions, reward_targets, value_targets = self.data_handler.get_batch()
 
         hidden_states = self.model.representation_model(observations)
 

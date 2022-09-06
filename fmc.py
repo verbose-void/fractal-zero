@@ -208,6 +208,10 @@ class FMC:
         self.root_value_sum += current_value_buffer.sum()
         self.root_visits += mask.sum()
 
+    @property
+    def root_value(self):
+        return self.root_value_sum / self.root_visits
+
     # @torch.no_grad()
     # def _update_game_tree(self):
     #     """A tree of walker trajectories is maintained so that after the simulation is complete, we can analyze the actions

@@ -17,7 +17,7 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
     obs = env.reset()
     game_history = GameHistory(obs)
 
-    num_walkers = 4
+    num_walkers = 16
     lookahead_steps = 10
     steps = 10
     for _ in range(steps):
@@ -31,7 +31,7 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
 
         obs, reward, done, info = env.step(action)
 
-        game_history.append(action, obs, reward)
+        game_history.append(action, obs, reward, fmc.root_value)
 
         # print("reward", reward)
         if done:
