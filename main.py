@@ -14,7 +14,7 @@ from trainer import Trainer
 from tqdm import tqdm
 
 
-def play_game(env, representation_model, dynamics_model) -> GameHistory:
+def play_game(env, model: JointModel) -> GameHistory:
     obs = env.reset()
     game_history = GameHistory(obs)
 
@@ -24,10 +24,10 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
     for _ in range(steps):
         obs = torch.tensor(obs)
 
-        state = representation_model.forward(obs)
+        state = model.representation_model.forward(obs)  # TODO: move this into FMC
 
         # action = lookahead(state, dynamics_model, lookahead_steps)
-        fmc = FMC(num_walkers, dynamics_model, state)
+        fmc = FMC(num_walkers, model, state)
         action = fmc.simulate(lookahead_steps)
 
         obs, reward, done, info = env.step(action)
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     train_every = 32
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
-        game_history = play_game(env, representation_model, dynamics_model)
+        game_history = play_game(env, joint_model)
         # print(game_history)
         replay_buffer.append(game_history)
 

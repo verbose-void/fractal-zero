@@ -4,6 +4,8 @@ import networkx as nx
 
 import matplotlib.pyplot as plt
 
+from models.joint_model import JointModel
+
 
 @torch.no_grad()
 def _relativize_vector(vector):
@@ -29,7 +31,7 @@ class FMC:
     def __init__(
         self,
         num_walkers: int,
-        dynamics_model,
+        model: JointModel,
         initial_state,
         balance: float = 1,
         verbose: bool = False,
@@ -40,11 +42,16 @@ class FMC:
         self.verbose = verbose
         self.gamma = gamma
 
+        self.model = model
+
+        # set the initial states for all walkers
         self.state = torch.zeros((num_walkers, *initial_state.shape))
         self.state[:] = initial_state
-
-        self.dynamics_model = dynamics_model
         self.dynamics_model.set_state(self.state)
+
+    @property
+    def dynamics_model(self):
+        return self.model.dynamics_model
 
     @torch.no_grad()
     def _perturbate(self):
