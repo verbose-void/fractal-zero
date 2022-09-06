@@ -59,9 +59,12 @@ class FMC:
         self.k = k
         assert self.k > 0
 
-        self.reward_buffer = torch.zeros(size=(self.num_walkers, self.k, 1))
+        # TODO: explain all these variables
+        self.reward_buffer = torch.zeros(size=(self.num_walkers, self.k, 1), dtype=float)
+        self.value_sum_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=float)
+        self.visit_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=int)
         self.root_actions = None
-        self.root_value = 0
+        self.root_value_sum = 0
         self.root_visits = 0
 
         for self.simulation_iteration in range(self.k):
@@ -84,15 +87,9 @@ class FMC:
         # NOTE: for each FMC simulation, we only need to store the value of the root. so the entire simulation collapses into a single point
         # to determine the root node's approximate value.
 
-        # return self._pick_root_action()
-
-        print(self.root_value, self.root_visits, self.root_value / self.root_visits)
-        print(self.root_actions)
-
-        highest_value_walker_index = torch.argmax(self.value_buffer)
+        self.walker_values = self.value_sum_buffer / self.visit_buffer
+        highest_value_walker_index = torch.argmax(self.walker_values)
         highest_value_action = self.root_actions[highest_value_walker_index, 0].numpy()
-
-        # return self.actions[0, 0].numpy()  # TODO
         return highest_value_action
 
     @torch.no_grad()
@@ -184,8 +181,11 @@ class FMC:
         # execute clone
         self.dynamics_model.state[self.clone_mask] = self.dynamics_model.state[self.clone_partners[self.clone_mask]]
         self.actions[self.clone_mask] = self.actions[self.clone_partners[self.clone_mask]]
-        self.reward_buffer[self.clone_mask] = self.reward_buffer[self.clone_partners[self.clone_mask]]
+
         self.root_actions[self.clone_mask] = self.root_actions[self.clone_partners[self.clone_mask]]
+        self.reward_buffer[self.clone_mask] = self.reward_buffer[self.clone_partners[self.clone_mask]]
+        self.value_sum_buffer[self.clone_mask] = self.value_sum_buffer[self.clone_partners[self.clone_mask]]
+        self.visit_buffer[self.clone_mask] = self.visit_buffer[self.clone_partners[self.clone_mask]]
 
         if self.verbose:
             print("state after", self.dynamics_model.state)
@@ -197,14 +197,16 @@ class FMC:
         backpropagate_all = self.simulation_iteration == self.k-1
 
         mask = torch.ones_like(self.clone_mask) if backpropagate_all else self.clone_mask
-        self.root_visits += mask.sum()
 
-        self.value_buffer = torch.zeros(size=(self.num_walkers, 1))
+        current_value_buffer = torch.zeros_like(self.value_sum_buffer)
         for i in reversed(range(self.simulation_iteration)):
-            self.value_buffer[mask] = self.reward_buffer[mask, i] + self.value_buffer[mask] * self.gamma
+            current_value_buffer[mask] = self.reward_buffer[mask, i] + current_value_buffer[mask] * self.gamma
 
-        self.root_value += self.value_buffer.sum()
+        self.value_sum_buffer += current_value_buffer
+        self.visit_buffer += mask.unsqueeze(-1)
 
+        self.root_value_sum += current_value_buffer.sum()
+        self.root_visits += mask.sum()
 
     # @torch.no_grad()
     # def _update_game_tree(self):
