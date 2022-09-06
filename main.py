@@ -22,7 +22,7 @@ def play_game(env, model: JointModel) -> GameHistory:
     lookahead_steps = 10
     steps = 10
     for _ in range(steps):
-        obs = torch.tensor(obs)
+        obs = torch.tensor(obs, device=model.device)
 
         state = model.representation_model.forward(obs)  # TODO: move this into FMC
 
@@ -46,6 +46,9 @@ def play_game(env, model: JointModel) -> GameHistory:
 
 
 if __name__ == "__main__":
+    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    device = torch.device("cpu")
+
     env = gym.make("CartPole-v0")
 
     max_replay_buffer_size = 128
@@ -58,10 +61,10 @@ if __name__ == "__main__":
         env, embedding_size, out_features=out_features
     )
     prediction_model = FullyConnectedPredictionModel(env, embedding_size)
-    joint_model = JointModel(representation_model, dynamics_model, prediction_model)
+    joint_model = JointModel(representation_model, dynamics_model, prediction_model).to(device)
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
-    data_handler = DataHandler(env, replay_buffer)
+    data_handler = DataHandler(env, replay_buffer, device=device)
     trainer = Trainer(data_handler, joint_model, use_wandb=True)
 
     num_games = 1024

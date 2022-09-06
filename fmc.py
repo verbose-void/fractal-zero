@@ -45,9 +45,13 @@ class FMC:
         self.model = model
 
         # set the initial states for all walkers
-        batched_initial_state = torch.zeros((num_walkers, *initial_state.shape))
+        batched_initial_state = torch.zeros((num_walkers, *initial_state.shape), device=self.device)
         batched_initial_state[:] = initial_state
         self.dynamics_model.set_state(batched_initial_state)
+
+    @property
+    def device(self):
+        return self.model.device
 
     @property
     def state(self):
@@ -80,10 +84,10 @@ class FMC:
 
         # TODO: explain all these variables
         self.reward_buffer = torch.zeros(
-            size=(self.num_walkers, self.k, 1), dtype=float
+            size=(self.num_walkers, self.k, 1), dtype=float, device=self.device
         )
-        self.value_sum_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=float)
-        self.visit_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=int)
+        self.value_sum_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=float, device=self.device)
+        self.visit_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=int, device=self.device)
         self.root_actions = None
         self.root_value_sum = 0
         self.root_visits = 0
@@ -116,18 +120,19 @@ class FMC:
         for _ in range(self.num_walkers):
             action = self.dynamics_model.action_space.sample()
             actions.append(action)
-        self.actions = torch.tensor(actions).unsqueeze(-1)
+        self.actions = torch.tensor(actions, device=self.device).unsqueeze(-1)
 
         if self.root_actions is None:
-            self.root_actions = torch.tensor(self.actions)
+            self.root_actions = torch.tensor(self.actions, device=self.device)
 
     @torch.no_grad()
     def _assign_clone_partners(self):
         """For the cloning phase, walkers need a partner to determine if they should be sent as reinforcements to their partner's state."""
 
-        self.clone_partners = np.random.choice(
+        choices = np.random.choice(
             np.arange(self.num_walkers), size=self.num_walkers
         )
+        self.clone_partners = torch.tensor(choices, dtype=int, device=self.device)
 
     @torch.no_grad()
     def _calculate_distances(self):
@@ -239,7 +244,7 @@ class FMC:
     def root_value(self):
         """Kind of equivalent to the MCTS root value."""
 
-        return self.root_value_sum / self.root_visits
+        return (self.root_value_sum / self.root_visits).item()
 
     @torch.no_grad()
     def _get_highest_value_action(self):
@@ -247,7 +252,7 @@ class FMC:
 
         self.walker_values = self.value_sum_buffer / self.visit_buffer
         highest_value_walker_index = torch.argmax(self.walker_values)
-        highest_value_action = self.root_actions[highest_value_walker_index, 0].numpy()
+        highest_value_action = self.root_actions[highest_value_walker_index, 0].cpu().numpy()
 
         return highest_value_action
 

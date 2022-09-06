@@ -18,3 +18,10 @@ class JointModel(torch.nn.Module):
         self.representation_model = representation_model
         self.dynamics_model = dynamics_model
         self.prediction_model = prediction_model
+
+    def to(self, device):
+        self.device = device
+        self.representation_model = self.representation_model.to(device)
+        self.dynamics_model = self.dynamics_model.to(device)
+        self.prediction_model = self.prediction_model.to(device)
+        return super().to(device)
