@@ -9,7 +9,7 @@ import wandb
 
 
 class Trainer:
-    def __init__(self, data_handler: DataHandler, model: JointModel):
+    def __init__(self, data_handler: DataHandler, model: JointModel, use_wandb: bool = False):
         self.data_handler = data_handler
 
         self.model = model
@@ -17,7 +17,9 @@ class Trainer:
         # TODO: load from config
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01)
 
-        wandb.init(project="fractal_zero_cartpole")
+        self.use_wandb = use_wandb
+        if self.use_wandb:
+            wandb.init(project="fractal_zero_cartpole")
 
     def train_step(self):
         self.optimizer.zero_grad()
@@ -37,6 +39,7 @@ class Trainer:
         # print(reward_targets)
         # print(reward_loss.item())
 
-        wandb.log({"reward_loss": reward_loss.item(), "mean_reward_targets": torch.mean(reward_targets)})
+        if self.use_wandb:
+            wandb.log({"reward_loss": reward_loss.item(), "mean_reward_targets": torch.mean(reward_targets)})
 
         self.optimizer.step()
