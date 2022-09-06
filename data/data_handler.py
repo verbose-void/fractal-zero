@@ -31,4 +31,4 @@ class DataHandler:
             actions[i] = action
             rewards[i] = reward
 
-        return torch.tensor(observations).float(), torch.tensor(actions).float(), torch.tensor(rewards)
+        return torch.tensor(observations).float(), torch.tensor(actions).float(), torch.tensor(rewards).float()

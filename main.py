@@ -56,12 +56,12 @@ if __name__ == "__main__":
     data_handler = DataHandler(env, replay_buffer)
     trainer = Trainer(data_handler, joint_model)
 
-    num_games = 3
+    num_games = 100
     for _ in range(num_games):
         game_history = play_game(env, representation_model, dynamics_model)
         print(game_history)
         replay_buffer.append(game_history)
         
-    trainer.train_step()
-
-        
+    train_steps = 100
+    for _ in range(train_steps):
+        trainer.train_step()
