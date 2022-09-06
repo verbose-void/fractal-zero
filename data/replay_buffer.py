@@ -2,7 +2,6 @@ import numpy as np
 
 
 class GameHistory:
-
     def __init__(self, initial_observation):
         self.actions = [0]  # TODO: use the action shape
         self.observations = [initial_observation]
@@ -16,10 +15,19 @@ class GameHistory:
         self.values.append(value)
 
     def __getitem__(self, index: int):
-        return (self.observations[index], self.actions[index], self.environment_reward_signals[index], self.values[index])
+        return (
+            self.observations[index],
+            self.actions[index],
+            self.environment_reward_signals[index],
+            self.values[index],
+        )
 
     def __len__(self):
-        if len(self.observations) == len(self.actions) == len(self.environment_reward_signals):
+        if (
+            len(self.observations)
+            == len(self.actions)
+            == len(self.environment_reward_signals)
+        ):
             return len(self.observations)
         raise ValueError(str(self))
 

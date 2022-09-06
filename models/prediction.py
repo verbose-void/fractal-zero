@@ -15,7 +15,9 @@ class FullyConnectedPredictionModel(torch.nn.Module):
         self.value_head = torch.nn.Linear(embedding_size, 1)
 
     def forward(self, embedding):
-        policy_logits = self.policy_head(embedding)  # TODO: wtf happens with continuous action spaces?
+        policy_logits = self.policy_head(
+            embedding
+        )  # TODO: wtf happens with continuous action spaces?
         value_prediction = self.value_head(embedding)
 
         return policy_logits, value_prediction

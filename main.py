@@ -43,18 +43,20 @@ def play_game(env, representation_model, dynamics_model) -> GameHistory:
         # fmc.render_best_walker_path()
 
     return game_history
-    
+
 
 if __name__ == "__main__":
-    env = gym.make('CartPole-v0')
+    env = gym.make("CartPole-v0")
 
     max_replay_buffer_size = 128
 
     embedding_size = 16
     out_features = 1
 
-    representation_model =  FullyConnectedRepresentationModel(env, embedding_size)
-    dynamics_model = FullyConnectedDynamicsModel(env, embedding_size, out_features=out_features)
+    representation_model = FullyConnectedRepresentationModel(env, embedding_size)
+    dynamics_model = FullyConnectedDynamicsModel(
+        env, embedding_size, out_features=out_features
+    )
     prediction_model = FullyConnectedPredictionModel(env, embedding_size)
     joint_model = JointModel(representation_model, dynamics_model, prediction_model)
 

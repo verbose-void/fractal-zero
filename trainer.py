@@ -9,7 +9,9 @@ import wandb
 
 
 class Trainer:
-    def __init__(self, data_handler: DataHandler, model: JointModel, use_wandb: bool = False):
+    def __init__(
+        self, data_handler: DataHandler, model: JointModel, use_wandb: bool = False
+    ):
         self.data_handler = data_handler
 
         self.model = model
@@ -24,7 +26,12 @@ class Trainer:
     def train_step(self):
         self.optimizer.zero_grad()
 
-        observations, actions, reward_targets, value_targets = self.data_handler.get_batch()
+        (
+            observations,
+            actions,
+            reward_targets,
+            value_targets,
+        ) = self.data_handler.get_batch()
 
         hidden_states = self.model.representation_model(observations)
 
@@ -33,7 +40,9 @@ class Trainer:
         self.model.dynamics_model.set_state(hidden_states)
         reward_predictions = self.model.dynamics_model(actions)
 
-        policy_logits, value_predictions = self.model.prediction_model(self.model.dynamics_model.state)
+        policy_logits, value_predictions = self.model.prediction_model(
+            self.model.dynamics_model.state
+        )
 
         reward_loss = F.mse_loss(reward_predictions, reward_targets)
         value_loss = F.mse_loss(value_predictions, value_targets)
@@ -42,6 +51,14 @@ class Trainer:
         cum_loss.backward()
 
         if self.use_wandb:
-            wandb.log({"reward_loss": reward_loss.item(), "mean_reward_targets": torch.mean(reward_targets), "value_loss": value_loss.item(), "cum_loss": cum_loss.item(), "mean_value_targets": value_targets.mean()})
+            wandb.log(
+                {
+                    "reward_loss": reward_loss.item(),
+                    "mean_reward_targets": torch.mean(reward_targets),
+                    "value_loss": value_loss.item(),
+                    "cum_loss": cum_loss.item(),
+                    "mean_value_targets": value_targets.mean(),
+                }
+            )
 
         self.optimizer.step()

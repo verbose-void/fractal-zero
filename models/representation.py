@@ -12,9 +12,7 @@ class FullyConnectedRepresentationModel(torch.nn.Module):
         self.observation_shape = get_space_shape(env.observation_space)
 
         in_dim = np.prod(self.observation_shape).astype(int)
-        self.net = torch.nn.Sequential(
-            torch.nn.Linear(in_dim, embedding_size)
-        )
+        self.net = torch.nn.Sequential(torch.nn.Linear(in_dim, embedding_size))
 
     def forward(self, observation):
         return self.net(observation)
