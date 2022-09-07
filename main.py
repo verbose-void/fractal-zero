@@ -25,23 +25,8 @@ if __name__ == "__main__":
     env = gym.make("CartPole-v0")
 
     max_replay_buffer_size = 128
-
     embedding_size = 16
     out_features = 1
-
-    representation_model = FullyConnectedRepresentationModel(env, embedding_size)
-    dynamics_model = FullyConnectedDynamicsModel(
-        env, embedding_size, out_features=out_features
-    )
-    prediction_model = FullyConnectedPredictionModel(env, embedding_size)
-    joint_model = JointModel(representation_model, dynamics_model, prediction_model).to(device)
-
-    use_wandb = True
-
-    replay_buffer = ReplayBuffer(max_replay_buffer_size)
-    data_handler = DataHandler(env, replay_buffer, device=device)
-    trainer = Trainer(data_handler, joint_model, use_wandb=use_wandb)
-    fractal_zero = FractalZero(env, joint_model)  # TODO: move into Trainer?
 
     num_games = 512
     train_every = 1
@@ -50,6 +35,20 @@ if __name__ == "__main__":
     max_steps = 512
     num_walkers = 128
     lookahead_steps = 8
+
+    use_wandb = True
+
+    representation_model = FullyConnectedRepresentationModel(env, embedding_size)
+    dynamics_model = FullyConnectedDynamicsModel(
+        env, embedding_size, out_features=out_features
+    )
+    prediction_model = FullyConnectedPredictionModel(env, embedding_size)
+    joint_model = JointModel(representation_model, dynamics_model, prediction_model).to(device)
+
+    replay_buffer = ReplayBuffer(max_replay_buffer_size)
+    data_handler = DataHandler(env, replay_buffer, device=device)
+    trainer = Trainer(data_handler, joint_model, use_wandb=use_wandb)
+    fractal_zero = FractalZero(env, joint_model)  # TODO: move into Trainer?
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
         game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps)

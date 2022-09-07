@@ -18,6 +18,10 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
         in_dim = self.embedding_size + np.prod(self.action_shape).astype(int)
         self.embedding_net = torch.nn.Sequential(
             torch.nn.Linear(in_dim, self.embedding_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(self.embedding_size, self.embedding_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(self.embedding_size, self.embedding_size),
         )
 
         self.auxiliary_net = torch.nn.Sequential(
