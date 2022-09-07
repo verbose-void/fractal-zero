@@ -1,48 +1,20 @@
+from this import d
+from time import sleep
 import gym
 
 import torch
 from data.data_handler import DataHandler
 from fmc import FMC
+from fractal_zero import FractalZero
 
 from models.dynamics import FullyConnectedDynamicsModel
 from models.joint_model import JointModel
 from models.prediction import FullyConnectedPredictionModel
 from models.representation import FullyConnectedRepresentationModel
-from data.replay_buffer import GameHistory, ReplayBuffer
+from data.replay_buffer import ReplayBuffer
 from trainer import Trainer
 
 from tqdm import tqdm
-
-
-def play_game(env, model: JointModel) -> GameHistory:
-    obs = env.reset()
-    game_history = GameHistory(obs)
-
-    num_walkers = 16
-    lookahead_steps = 10
-    steps = 10
-    for _ in range(steps):
-        obs = torch.tensor(obs, device=model.device)
-
-        state = model.representation_model.forward(obs)  # TODO: move this into FMC
-
-        # action = lookahead(state, dynamics_model, lookahead_steps)
-        fmc = FMC(num_walkers, model, state)
-        action = fmc.simulate(lookahead_steps)
-
-        obs, reward, done, info = env.step(action)
-
-        game_history.append(action, obs, reward, fmc.root_value)
-
-        # print("reward", reward)
-        if done:
-            # print('done')
-            break
-
-        # env.render()
-        # fmc.render_best_walker_path()
-
-    return game_history
 
 
 if __name__ == "__main__":
@@ -65,14 +37,19 @@ if __name__ == "__main__":
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer, device=device)
-    trainer = Trainer(data_handler, joint_model, use_wandb=True)
+    trainer = Trainer(data_handler, joint_model, use_wandb=False)
 
-    num_games = 1024
-    train_every = 32
+    num_games = 10
+    train_every = 1
+
+    fractal_zero = FractalZero(env, joint_model)
+
+    max_steps = 128
+    num_walkers = 128
+    lookahead_steps = 16
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
-        game_history = play_game(env, joint_model)
-        # print(game_history)
+        game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps)
         replay_buffer.append(game_history)
 
         if i % train_every == 0:

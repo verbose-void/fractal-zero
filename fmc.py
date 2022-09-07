@@ -32,7 +32,6 @@ class FMC:
         self,
         num_walkers: int,
         model: JointModel,
-        initial_state,
         balance: float = 1,
         verbose: bool = False,
         gamma: float = 0.99,
@@ -44,9 +43,10 @@ class FMC:
 
         self.model = model
 
+    def set_state(self, state: torch.Tensor):
         # set the initial states for all walkers
-        batched_initial_state = torch.zeros((num_walkers, *initial_state.shape), device=self.device)
-        batched_initial_state[:] = initial_state
+        batched_initial_state = torch.zeros((self.num_walkers, *state.shape), device=self.device)
+        batched_initial_state[:] = state
         self.dynamics_model.set_state(batched_initial_state)
 
     @property
