@@ -50,12 +50,17 @@ class FractalZeroTrainer:
         # print(observations.shape, observations[:, 0].shape)
 
         first_observations = observations[:, 0]
-        initial_hidden_states = self.representation_model(first_observations)
+        first_hidden_states = self.representation_model.forward(first_observations)
 
-        # TODO: unroll model from initial hidden state
+        self.dynamics_model.set_state(first_hidden_states)
 
-        self.dynamics_model.set_state(initial_hidden_states)
-        auxiliary_predictions = self.dynamics_model(actions)
+        # unroll the model
+        auxiliary_predictions = torch.zeros_like(auxiliary_targets)
+        for unroll_step in range(self.unroll_steps):
+            step_actions = actions[:, unroll_step]
+            auxiliary_predictions[:, unroll_step] = self.dynamics_model(step_actions)
+
+        exit()
 
         policy_logits, value_predictions = self.prediction_model(
             self.dynamics_model.state

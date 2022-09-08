@@ -40,7 +40,7 @@ class DataHandler:
         # TODO: put these on the correct device sooner?
         return (
             torch.tensor(observations, device=self.device).float(),
-            torch.tensor(actions, device=self.device).squeeze(-1).float(),
-            torch.tensor(auxiliaries, device=self.device).float(),
+            torch.tensor(actions, device=self.device).float(),
+            torch.tensor(auxiliaries, device=self.device).unsqueeze(-1).float(),
             torch.tensor(values, device=self.device).float(),
         )
