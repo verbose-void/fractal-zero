@@ -1,5 +1,7 @@
 import gym
 
+import torch
+
 
 def get_space_shape(space):
     if isinstance(space, gym.spaces.Discrete):
@@ -9,3 +11,11 @@ def get_space_shape(space):
         return space.shape
 
     raise NotImplementedError(f"Type not supported: {type(space)}")
+
+
+def mean_min_max_dict(name: str, arr: torch.Tensor) -> dict:
+    return {
+        f"{name}/mean": arr.mean(),
+        f"{name}/min": arr.min(),
+        f"{name}/max": arr.max(),
+    }

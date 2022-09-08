@@ -40,10 +40,10 @@ if __name__ == "__main__":
     learning_rate = 0.02
 
     max_steps = 200
-    num_walkers = 512
+    num_walkers = 128
     balance = 1.2
 
-    lookahead_steps = 8
+    lookahead_steps = 64
     unroll_steps = 16
 
     use_wandb = True

@@ -7,6 +7,7 @@ import wandb
 import matplotlib.pyplot as plt
 
 from models.joint_model import JointModel
+from utils import mean_min_max_dict
 
 
 @torch.no_grad()
@@ -116,8 +117,9 @@ class FMC:
 
         if self.use_wandb:
             wandb.log({
-                "fmc/mean_value_sum_buffer": self.value_sum_buffer.float().mean().item(),
-                "fmc/mean_visit_buffer": self.visit_buffer.float().mean().item(),
+                **mean_min_max_dict("fmc/visit_buffer", self.visit_buffer.float()),
+                **mean_min_max_dict("fmc/value_sum_buffer", self.value_sum_buffer),
+                **mean_min_max_dict("fmc/average_value_buffer", self.value_sum_buffer / self.visit_buffer.float()),
             }, commit=False)
 
         return self._get_highest_value_action()
@@ -164,15 +166,16 @@ class FMC:
         ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
-        values = _relativize_vector(self.predicted_values).squeeze(-1)
-        distances = _relativize_vector(self.distances)
-        self.virtual_rewards = (values ** self.balance) * distances
+        rel_values = _relativize_vector(self.predicted_values).squeeze(-1)
+        rel_distances = _relativize_vector(self.distances)
+        self.virtual_rewards = (rel_values ** self.balance) * rel_distances
 
         if self.use_wandb:
             wandb.log({
-                "fmc/mean_virtual_rewards": self.virtual_rewards.mean(),
-                "fmc/mean_predicted_values": values.mean(),
-                "fmc/mean_distances": distances.mean(),
+                **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
+                **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
+                **mean_min_max_dict("fmc/distances", self.distances),
+                **mean_min_max_dict("fmc/auxiliaries", self.rewards),
             }, commit=False)
 
     @torch.no_grad()
