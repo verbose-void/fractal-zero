@@ -12,13 +12,16 @@ from models.joint_model import JointModel
 
 
 class FractalZero(torch.nn.Module):
-    def __init__(self, env: gym.Env, model: JointModel):
+    def __init__(self, env: gym.Env, model: JointModel, balance: float=1):
         super().__init__()
 
         self.env = env
         self.model = model
 
+        # TODO: reuse FMC instance?
         self.fmc = None
+        # TODO: move into config
+        self.balance = balance
 
     def forward(self, observation, lookahead_steps: int = 0):
         # TODO: docstring, note that lookahead_steps == 0 means there won't be a tree search
@@ -43,7 +46,7 @@ class FractalZero(torch.nn.Module):
         obs = self.env.reset()
         game_history = GameHistory(obs)
 
-        self.fmc = FMC(num_walkers, self.model)
+        self.fmc = FMC(num_walkers, self.model, balance=self.balance)
 
         for _ in range(max_steps):
             obs = torch.tensor(obs, device=self.model.device)

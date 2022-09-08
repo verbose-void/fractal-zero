@@ -1,24 +1,23 @@
 import torch
 
 from data.data_handler import DataHandler
-from data.replay_buffer import ReplayBuffer
 from fractal_zero import FractalZero
-from models.joint_model import JointModel
 
 import wandb
 
 
 class FractalZeroTrainer:
     def __init__(
-        self, fractal_zero: FractalZero, data_handler: DataHandler, use_wandb: bool = False
+        self, fractal_zero: FractalZero, data_handler: DataHandler, unroll_steps: int, learning_rate: float, use_wandb: bool = False
     ):
         self.data_handler = data_handler
 
         self.fractal_zero = fractal_zero
 
         # TODO: load from config
-        self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=0.0005)
-        self.unroll_steps = 8
+        self.learning_rate = learning_rate
+        self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
+        self.unroll_steps = unroll_steps
 
         self.use_wandb = use_wandb
         if self.use_wandb:
@@ -92,6 +91,7 @@ class FractalZeroTrainer:
                     "value_loss": value_loss.item(),
                     "composite_loss": composite_loss.item(),
                     "mean_value_targets": self.target_values.mean(),
+                    "replay_buffer_size": len(self.data_handler.replay_buffer),
                 }
             )
 

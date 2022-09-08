@@ -153,10 +153,9 @@ class FMC:
         ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
-        activated_values = _relativize_vector(self.predicted_values).squeeze(-1)
-        activated_distances = _relativize_vector(self.distances)
-
-        self.virtual_rewards = activated_values * activated_distances ** self.balance
+        values = _relativize_vector(self.predicted_values).squeeze(-1)
+        distances = _relativize_vector(self.distances)
+        self.virtual_rewards = (values ** self.balance) * distances
 
     @torch.no_grad()
     def _determine_clone_mask(self):

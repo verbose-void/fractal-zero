@@ -28,19 +28,23 @@ if __name__ == "__main__":
 
     env = gym.make("CartPole-v0")
 
-    max_replay_buffer_size = 256
+    max_replay_buffer_size = 64
     embedding_size = 16
     out_features = 1
 
-    num_games = 4096
-    batch_size = 64
-    train_every = 4
+    num_games = 1024
+    train_every = 1
     train_batches = 1
     evaluate_every = 4
+    batch_size = 8
+    learning_rate = 0.01
 
-    max_steps = 512
+    max_steps = 200
     num_walkers = 256
+    balance = 1.2
+
     lookahead_steps = 8
+    unroll_steps = 8
 
     use_wandb = True
 
@@ -54,8 +58,8 @@ if __name__ == "__main__":
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer, device=device, batch_size=batch_size)
 
-    fractal_zero = FractalZero(env, joint_model)
-    trainer = FractalZeroTrainer(fractal_zero, data_handler, use_wandb=use_wandb)
+    fractal_zero = FractalZero(env, joint_model, balance=balance)
+    trainer = FractalZeroTrainer(fractal_zero, data_handler, unroll_steps=unroll_steps, learning_rate=learning_rate, use_wandb=use_wandb)
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
         game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps)
