@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     env = gym.make("CartPole-v0")
 
-    max_replay_buffer_size = 64
+    max_replay_buffer_size = 512
     embedding_size = 16
     out_features = 1
 
@@ -36,15 +36,15 @@ if __name__ == "__main__":
     train_every = 1
     train_batches = 1
     evaluate_every = 4
-    batch_size = 8
-    learning_rate = 0.01
+    batch_size = 128
+    learning_rate = 0.02
 
     max_steps = 200
-    num_walkers = 256
+    num_walkers = 512
     balance = 1.2
 
     lookahead_steps = 8
-    unroll_steps = 8
+    unroll_steps = 16
 
     use_wandb = True
 
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     trainer = FractalZeroTrainer(fractal_zero, data_handler, unroll_steps=unroll_steps, learning_rate=learning_rate, use_wandb=use_wandb)
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
-        game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps)
+        game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps, use_wandb_for_fmc=use_wandb)
         replay_buffer.append(game_history)
 
         if i % train_every == 0:
@@ -76,6 +76,6 @@ if __name__ == "__main__":
             game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps, render=False)
             if use_wandb:
                 wandb.log({
-                    "evaluation_episode_length": len(game_history),
-                    "evaluation_cumulative_reward": sum(game_history.environment_reward_signals),
+                    "evaluation/episode_length": len(game_history),
+                    "evaluation/cumulative_reward": sum(game_history.environment_reward_signals),
                 }, commit=False)

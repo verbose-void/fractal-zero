@@ -86,12 +86,12 @@ class FractalZeroTrainer:
         if self.use_wandb:
             wandb.log(
                 {
-                    "auxiliary_loss": auxiliary_loss.item(),
-                    "mean_auxiliary_targets": self.target_auxiliaries.mean(),
-                    "value_loss": value_loss.item(),
-                    "composite_loss": composite_loss.item(),
-                    "mean_value_targets": self.target_values.mean(),
-                    "replay_buffer_size": len(self.data_handler.replay_buffer),
+                    "losses/auxiliary": auxiliary_loss.item(),
+                    "losses/value": value_loss.item(),
+                    "losses/composite": composite_loss.item(),
+                    "data/mean_auxiliary_targets": self.target_auxiliaries.mean(),
+                    "data/mean_value_targets": self.target_values.mean(),
+                    "data/replay_buffer_size": len(self.data_handler.replay_buffer),
                 }
             )
 

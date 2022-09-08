@@ -2,6 +2,8 @@ import torch
 import numpy as np
 import networkx as nx
 
+import wandb
+
 import matplotlib.pyplot as plt
 
 from models.joint_model import JointModel
@@ -35,6 +37,7 @@ class FMC:
         balance: float = 1,
         verbose: bool = False,
         gamma: float = 0.99,
+        use_wandb: bool = False,
     ):
         self.num_walkers = num_walkers
         self.balance = balance
@@ -42,6 +45,8 @@ class FMC:
         self.gamma = gamma
 
         self.model = model
+
+        self.use_wandb = use_wandb
 
     def set_state(self, state: torch.Tensor):
         # set the initial states for all walkers
@@ -109,6 +114,12 @@ class FMC:
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
 
+        if self.use_wandb:
+            wandb.log({
+                "fmc/mean_value_sum_buffer": self.value_sum_buffer.float().mean().item(),
+                "fmc/mean_visit_buffer": self.visit_buffer.float().mean().item(),
+            }, commit=False)
+
         return self._get_highest_value_action()
 
     @torch.no_grad()
@@ -157,6 +168,13 @@ class FMC:
         distances = _relativize_vector(self.distances)
         self.virtual_rewards = (values ** self.balance) * distances
 
+        if self.use_wandb:
+            wandb.log({
+                "fmc/mean_virtual_rewards": self.virtual_rewards.mean(),
+                "fmc/mean_predicted_values": values.mean(),
+                "fmc/mean_distances": distances.mean(),
+            }, commit=False)
+
     @torch.no_grad()
     def _determine_clone_mask(self):
         """The clone mask is based on the virtual rewards of each walker and their clone partner. If a walker is selected to clone, their
@@ -169,6 +187,11 @@ class FMC:
         self.clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
         r = np.random.uniform()
         self.clone_mask = self.clone_probabilities >= r
+
+        if self.use_wandb:
+            wandb.log({
+                "fmc/num_cloned": self.clone_mask.sum(),
+            }, commit=False)
 
     @torch.no_grad()
     def _prepare_clone_variables(self):
