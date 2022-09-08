@@ -9,10 +9,17 @@ class FullyConnectedRepresentationModel(torch.nn.Module):
     def __init__(self, env: gym.Env, embedding_size: int):
         super().__init__()
 
+        self.embedding_size = embedding_size
         self.observation_shape = get_space_shape(env.observation_space)
 
         in_dim = np.prod(self.observation_shape).astype(int)
-        self.net = torch.nn.Sequential(torch.nn.Linear(in_dim, embedding_size))
+        self.net = torch.nn.Sequential(
+            torch.nn.Linear(in_dim, self.embedding_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(self.embedding_size, self.embedding_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(self.embedding_size, self.embedding_size),
+        )
 
     def forward(self, observation):
         return self.net(observation)
