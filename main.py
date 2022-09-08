@@ -28,21 +28,21 @@ if __name__ == "__main__":
 
     env = gym.make("CartPole-v0")
 
-    max_replay_buffer_size = 128
+    max_replay_buffer_size = 256
     embedding_size = 16
     out_features = 1
 
-    num_games = 512
+    num_games = 4096
     batch_size = 64
-    train_every = 1
+    train_every = 4
     train_batches = 1
-    evaluate_every = 1
+    evaluate_every = 4
 
     max_steps = 512
-    num_walkers = 128
+    num_walkers = 256
     lookahead_steps = 8
 
-    use_wandb = False
+    use_wandb = True
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(
@@ -66,10 +66,12 @@ if __name__ == "__main__":
                 trainer.train_step()
 
         if i % evaluate_every == 0:
+            fractal_zero.eval()
+
             # TODO: move into trainer?
             game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps, render=False)
             if use_wandb:
                 wandb.log({
                     "evaluation_episode_length": len(game_history),
                     "evaluation_cumulative_reward": sum(game_history.environment_reward_signals),
-                })
+                }, commit=False)

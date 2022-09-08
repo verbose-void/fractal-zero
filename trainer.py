@@ -42,8 +42,8 @@ class FractalZeroTrainer:
         (
             self.observations,
             self.actions,
-            self.auxiliary_targets,
-            self.value_targets,
+            self.target_auxiliaries,
+            self.target_values,
         ) = batch
 
         return batch
@@ -57,34 +57,38 @@ class FractalZeroTrainer:
         self.dynamics_model.set_state(first_hidden_states)
 
         # preallocate unroll prediction arrays
-        self.auxiliary_predictions = torch.zeros_like(self.auxiliary_targets)
-        self.value_predictions = torch.zeros_like(self.value_targets)
+        self.unrolled_auxiliaries = torch.zeros_like(self.target_auxiliaries)
+        self.unrolled_values = torch.zeros_like(self.target_values)
 
         # fill arrays
         for unroll_step in range(self.unroll_steps):
             step_actions = self.actions[:, unroll_step]
-            self.auxiliary_predictions[:, unroll_step] = self.dynamics_model(step_actions)
+            self.unrolled_auxiliaries[:, unroll_step] = self.dynamics_model(step_actions)
 
             state = self.dynamics_model.state
-            _, unrolled_values = self.prediction_model.forward(state)
+            _, value_predictions = self.prediction_model.forward(state)
             # TODO: unroll policy
 
-            self.value_predictions[:, unroll_step] = unrolled_values
+            self.unrolled_values[:, unroll_step] = value_predictions
 
     def train_step(self):
+        self.fractal_zero.train()
+
         self.optimizer.zero_grad()
 
         self._get_batch()
         self._unroll()
 
-        exit()
-
-        policy_logits, value_predictions = self.prediction_model(
-            self.dynamics_model.state
+        auxiliary_loss = self.dynamics_model.auxiliary_loss(
+            self.unrolled_auxiliaries, 
+            self.target_auxiliaries,
         )
 
-        auxiliary_loss = self.dynamics_model.auxiliary_loss(auxiliary_predictions, auxiliary_targets)
-        value_loss = self.prediction_model.value_loss(value_predictions, value_targets)
+        value_loss = self.prediction_model.value_loss(
+            self.unrolled_values, 
+            self.target_values
+        )
+
         composite_loss = auxiliary_loss + value_loss
         composite_loss.backward()
 
@@ -92,10 +96,10 @@ class FractalZeroTrainer:
             wandb.log(
                 {
                     "auxiliary_loss": auxiliary_loss.item(),
-                    "mean_auxiliary_targets": torch.mean(auxiliary_targets),
+                    "mean_auxiliary_targets": self.target_auxiliaries.mean(),
                     "value_loss": value_loss.item(),
                     "composite_loss": composite_loss.item(),
-                    "mean_value_targets": value_targets.mean(),
+                    "mean_value_targets": self.target_values.mean(),
                 }
             )
 
