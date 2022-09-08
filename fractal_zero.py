@@ -45,7 +45,7 @@ class FractalZero(torch.nn.Module):
 
         self.fmc = FMC(num_walkers, self.model)
 
-        for step in range(max_steps):
+        for _ in range(max_steps):
             obs = torch.tensor(obs, device=self.model.device)
             action, value_estimate = self.forward(obs, lookahead_steps=lookahead_steps)
             obs, reward, done, info = self.env.step(action)

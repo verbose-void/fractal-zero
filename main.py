@@ -12,10 +12,14 @@ from models.joint_model import JointModel
 from models.prediction import FullyConnectedPredictionModel
 from models.representation import FullyConnectedRepresentationModel
 from data.replay_buffer import ReplayBuffer
-from trainer import Trainer
+from trainer import FractalZeroTrainer
 
 import wandb
 from tqdm import tqdm
+
+
+def generate_games():
+    pass
 
 
 if __name__ == "__main__":
@@ -50,10 +54,8 @@ if __name__ == "__main__":
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer, device=device, batch_size=batch_size)
 
-
-    trainer = Trainer(data_handler, joint_model, use_wandb=use_wandb)
-
     fractal_zero = FractalZero(env, joint_model)
+    trainer = FractalZeroTrainer(fractal_zero, data_handler, use_wandb=use_wandb)
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
         game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps)
