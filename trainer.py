@@ -71,14 +71,7 @@ class FractalZeroTrainer:
 
             self.unrolled_values[:, unroll_step] = value_predictions
 
-    def train_step(self):
-        self.fractal_zero.train()
-
-        self.optimizer.zero_grad()
-
-        self._get_batch()
-        self._unroll()
-
+    def _calculate_losses(self):
         auxiliary_loss = self.dynamics_model.auxiliary_loss(
             self.unrolled_auxiliaries, 
             self.target_auxiliaries,
@@ -89,8 +82,7 @@ class FractalZeroTrainer:
             self.target_values
         )
 
-        composite_loss = auxiliary_loss + value_loss
-        composite_loss.backward()
+        composite_loss = (auxiliary_loss + value_loss) / self.unroll_steps
 
         if self.use_wandb:
             wandb.log(
@@ -102,5 +94,18 @@ class FractalZeroTrainer:
                     "mean_value_targets": self.target_values.mean(),
                 }
             )
+
+        return composite_loss
+
+    def train_step(self):
+        self.fractal_zero.train()
+
+        self.optimizer.zero_grad()
+
+        self._get_batch()
+        self._unroll()
+
+        composite_loss = self._calculate_losses()
+        composite_loss.backward()
 
         self.optimizer.step()
