@@ -1,4 +1,6 @@
 import torch
+import torch.nn.functional as F
+
 import gym
 import numpy as np
 
@@ -13,6 +15,9 @@ class FullyConnectedPredictionModel(torch.nn.Module):
 
         self.policy_head = torch.nn.Linear(embedding_size, np.prod(self.action_shape))
         self.value_head = torch.nn.Linear(embedding_size, 1)
+
+        self.policy_loss = None  # TODO
+        self.value_loss = F.mse_loss
 
     def forward(self, embedding):
         policy_logits = self.policy_head(

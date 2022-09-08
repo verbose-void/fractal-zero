@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 
 from data.data_handler import DataHandler
 from data.replay_buffer import ReplayBuffer
@@ -29,7 +28,7 @@ class Trainer:
         (
             observations,
             actions,
-            reward_targets,
+            auxiliary_targets,
             value_targets,
         ) = self.data_handler.get_batch()
 
@@ -38,25 +37,24 @@ class Trainer:
         # TODO: unroll model from initial hidden state
 
         self.model.dynamics_model.set_state(hidden_states)
-        reward_predictions = self.model.dynamics_model(actions)
+        auxiliary_predictions = self.model.dynamics_model(actions)
 
         policy_logits, value_predictions = self.model.prediction_model(
             self.model.dynamics_model.state
         )
 
-        reward_loss = F.mse_loss(reward_predictions, reward_targets)
-        value_loss = F.mse_loss(value_predictions, value_targets)
-
-        cum_loss = reward_loss + value_loss
-        cum_loss.backward()
+        auxiliary_loss = self.model.dynamics_model.auxiliary_loss(auxiliary_predictions, auxiliary_targets)
+        value_loss = self.model.prediction_model.value_loss(value_predictions, value_targets)
+        composite_loss = auxiliary_loss + value_loss
+        composite_loss.backward()
 
         if self.use_wandb:
             wandb.log(
                 {
-                    "reward_loss": reward_loss.item(),
-                    "mean_reward_targets": torch.mean(reward_targets),
+                    "auxiliary_loss": auxiliary_loss.item(),
+                    "mean_auxiliary_targets": torch.mean(auxiliary_targets),
                     "value_loss": value_loss.item(),
-                    "cum_loss": cum_loss.item(),
+                    "composite_loss": composite_loss.item(),
                     "mean_value_targets": value_targets.mean(),
                 }
             )

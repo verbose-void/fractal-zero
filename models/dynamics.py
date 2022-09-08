@@ -4,6 +4,8 @@ import gym
 
 from utils import get_space_shape
 
+import torch.nn.functional as F
+
 
 class FullyConnectedDynamicsModel(torch.nn.Module):
     def __init__(self, env: gym.Env, embedding_size: int, out_features: int = 1):
@@ -24,9 +26,11 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
             torch.nn.Linear(self.embedding_size, self.embedding_size),
         )
 
+        # TODO: explain why it's called auxiliary (hint: it's more general than reward head)
         self.auxiliary_net = torch.nn.Sequential(
             torch.nn.Linear(self.embedding_size, self.out_features)
         )
+        self.auxiliary_loss = F.mse_loss
 
         self.state = None
 
@@ -43,3 +47,4 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
 
         self.state = self.embedding_net(x)
         return self.auxiliary_net(self.state)
+        
