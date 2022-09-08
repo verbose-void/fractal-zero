@@ -36,29 +36,46 @@ class FractalZeroTrainer:
     def prediction_model(self):
         return self.fractal_zero.model.prediction_model
 
-    def train_step(self):
-        self.optimizer.zero_grad()
+    def _get_batch(self):
+        batch = self.data_handler.get_batch(self.unroll_steps)
 
         (
-            observations,
-            actions,
-            auxiliary_targets,
-            value_targets,
-        ) = self.data_handler.get_batch(self.unroll_steps)
+            self.observations,
+            self.actions,
+            self.auxiliary_targets,
+            self.value_targets,
+        ) = batch
 
-        # print(observations.shape, actions.shape, auxiliary_targets.shape, value_targets.shape)
-        # print(observations.shape, observations[:, 0].shape)
+        return batch
 
-        first_observations = observations[:, 0]
+    def _unroll(self):
+        # TODO: docstring
+
+        first_observations = self.observations[:, 0]
         first_hidden_states = self.representation_model.forward(first_observations)
 
         self.dynamics_model.set_state(first_hidden_states)
 
-        # unroll the model
-        auxiliary_predictions = torch.zeros_like(auxiliary_targets)
+        # preallocate unroll prediction arrays
+        self.auxiliary_predictions = torch.zeros_like(self.auxiliary_targets)
+        self.value_predictions = torch.zeros_like(self.value_targets)
+
+        # fill arrays
         for unroll_step in range(self.unroll_steps):
-            step_actions = actions[:, unroll_step]
-            auxiliary_predictions[:, unroll_step] = self.dynamics_model(step_actions)
+            step_actions = self.actions[:, unroll_step]
+            self.auxiliary_predictions[:, unroll_step] = self.dynamics_model(step_actions)
+
+            state = self.dynamics_model.state
+            _, unrolled_values = self.prediction_model.forward(state)
+            # TODO: unroll policy
+
+            self.value_predictions[:, unroll_step] = unrolled_values
+
+    def train_step(self):
+        self.optimizer.zero_grad()
+
+        self._get_batch()
+        self._unroll()
 
         exit()
 
