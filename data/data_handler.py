@@ -7,12 +7,12 @@ from utils import get_space_shape
 
 
 class DataHandler:
-    def __init__(self, env: gym.Env, replay_buffer: ReplayBuffer, device):
+    def __init__(self, env: gym.Env, replay_buffer: ReplayBuffer, device, batch_size: int=8):
         self.replay_buffer = replay_buffer
         self.device = device
 
         # TODO: config
-        self.batch_size = 8
+        self.batch_size = batch_size
 
         self.observation_shape = get_space_shape(env.observation_space)
         self.action_shape = get_space_shape(env.action_space)

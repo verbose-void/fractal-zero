@@ -29,7 +29,9 @@ if __name__ == "__main__":
     out_features = 1
 
     num_games = 512
+    batch_size = 128
     train_every = 1
+    train_batches = 1
     evaluate_every = 1
 
     max_steps = 512
@@ -46,7 +48,7 @@ if __name__ == "__main__":
     joint_model = JointModel(representation_model, dynamics_model, prediction_model).to(device)
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
-    data_handler = DataHandler(env, replay_buffer, device=device)
+    data_handler = DataHandler(env, replay_buffer, device=device, batch_size=batch_size)
     trainer = Trainer(data_handler, joint_model, use_wandb=use_wandb)
     fractal_zero = FractalZero(env, joint_model)  # TODO: move into Trainer?
 
@@ -55,7 +57,8 @@ if __name__ == "__main__":
         replay_buffer.append(game_history)
 
         if i % train_every == 0:
-            trainer.train_step()
+            for _ in range(train_batches):
+                trainer.train_step()
 
         if i % evaluate_every == 0:
             # TODO: move into trainer?
