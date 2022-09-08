@@ -19,24 +19,28 @@ class DataHandler:
 
         # TODO: expert dataset
 
-    def get_batch(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        observations = np.zeros((self.batch_size, *self.observation_shape), dtype=float)
-        actions = np.zeros((self.batch_size, *self.action_shape), dtype=float)
-        auxiliaries = np.zeros((self.batch_size, 1), dtype=float)
-        values = np.zeros((self.batch_size, 1), dtype=float)
+    def get_batch(self, num_frames: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # TODO: a version of this that allows non-uniform numbers of frames per batch
+
+        assert num_frames > 0
+
+        observations = np.zeros((self.batch_size, num_frames, *self.observation_shape), dtype=float)
+        actions = np.zeros((self.batch_size, num_frames, *self.action_shape), dtype=float)
+        auxiliaries = np.zeros((self.batch_size, num_frames,), dtype=float)
+        values = np.zeros((self.batch_size, num_frames,), dtype=float)
 
         for i in range(self.batch_size):
-            observation, action, reward, value = self.replay_buffer.sample()
+            gobservations, gactions, grewards, gvalues = self.replay_buffer.sample_game_clip(num_frames, pad_to_num_frames=True)
 
-            observations[i] = observation
-            actions[i] = action
-            auxiliaries[i] = reward  # auxiliary is a generalization of reward.
-            values[i] = value
+            observations[i, :] = gobservations
+            actions[i] = np.expand_dims(gactions, -1)  # TODO: fix action shape to avoid this expanddims
+            auxiliaries[i] = grewards  # auxiliary is a generalization of reward.
+            values[i] = gvalues
 
         # TODO: put these on the correct device sooner?
         return (
             torch.tensor(observations, device=self.device).float(),
-            torch.tensor(actions, device=self.device).float(),
+            torch.tensor(actions, device=self.device).squeeze(-1).float(),
             torch.tensor(auxiliaries, device=self.device).float(),
             torch.tensor(values, device=self.device).float(),
         )

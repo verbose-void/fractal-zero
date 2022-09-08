@@ -18,6 +18,7 @@ class FractalZeroTrainer:
 
         # TODO: load from config
         self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=0.0005)
+        self.unroll_steps = 8
 
         self.use_wandb = use_wandb
         if self.use_wandb:
@@ -43,13 +44,17 @@ class FractalZeroTrainer:
             actions,
             auxiliary_targets,
             value_targets,
-        ) = self.data_handler.get_batch()
+        ) = self.data_handler.get_batch(self.unroll_steps)
 
-        hidden_states = self.representation_model(observations)
+        # print(observations.shape, actions.shape, auxiliary_targets.shape, value_targets.shape)
+        # print(observations.shape, observations[:, 0].shape)
+
+        first_observations = observations[:, 0]
+        initial_hidden_states = self.representation_model(first_observations)
 
         # TODO: unroll model from initial hidden state
 
-        self.dynamics_model.set_state(hidden_states)
+        self.dynamics_model.set_state(initial_hidden_states)
         auxiliary_predictions = self.dynamics_model(actions)
 
         policy_logits, value_predictions = self.prediction_model(

@@ -3,16 +3,30 @@ import numpy as np
 
 class GameHistory:
     def __init__(self, initial_observation):
+        # first "frame" is always empty (with the actual initial observation)
         self.actions = [0]  # TODO: use the action shape
         self.observations = [initial_observation]
         self.environment_reward_signals = [0]
         self.values = [0]
+
+    @property
+    def observation_shape(self):
+        return self.observations[0].shape
+
+    @property
+    def action_shape(self):
+        return tuple()  # TODO!
 
     def append(self, action, observation, environment_reward_signal, value):
         self.actions.append(action)
         self.observations.append(observation)
         self.environment_reward_signals.append(environment_reward_signal)
         self.values.append(value)
+
+    def empty_frame(self):
+        actual_obs, action, reward, value = self[0]
+        empty_obs = np.zeros_like(actual_obs)
+        return empty_obs, action, reward, value
 
     def __getitem__(self, index: int):
         return (
@@ -53,11 +67,38 @@ class ReplayBuffer:
         if len(self) > self.max_size:
             raise ValueError
 
-    def sample(self) -> tuple:
+    def sample_game(self) -> GameHistory:
         game_index = np.random.randint(0, len(self.game_histories))
-        game_history = self.game_histories[game_index]
-        frame_index = np.random.randint(0, len(game_history))
-        return game_history[frame_index]
+        return self.game_histories[game_index]
 
+    def sample_game_clip(self, clip_length: int, pad_to_num_frames: bool = True) -> tuple:
+        assert clip_length > 0
+
+        game = self.sample_game()
+
+        start_frame = np.random.randint(0, len(game))
+        end_frame = start_frame + clip_length
+
+        actual_frames = game[start_frame:end_frame]
+
+        actual_num_frames = len(actual_frames[0])
+        num_frames = clip_length if pad_to_num_frames else actual_num_frames
+
+        observations = np.zeros((num_frames, *game.observation_shape), dtype=float)
+        actions = np.zeros((num_frames, *game.action_shape,), dtype=float)
+        rewards = np.zeros((num_frames,), dtype=float)
+        values = np.zeros((num_frames,), dtype=float)
+
+        observations[:actual_num_frames] = actual_frames[0]
+        actions[:actual_num_frames] = actual_frames[1]
+        rewards[:actual_num_frames] = actual_frames[2]
+        values[:actual_num_frames] = actual_frames[3]
+
+        return observations, actions, rewards, values
+
+    def empty_frames(self, reference_game_history: GameHistory, num_frames: int):
+        assert num_frames >= 0
+        return tuple(zip(*tuple([reference_game_history.empty_frame() for _ in range(num_frames)])))
+        
     def __len__(self):
         return len(self.game_histories)
