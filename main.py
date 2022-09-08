@@ -29,7 +29,7 @@ if __name__ == "__main__":
     out_features = 1
 
     num_games = 512
-    batch_size = 128
+    batch_size = 64
     train_every = 1
     train_batches = 1
     evaluate_every = 1
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     num_walkers = 128
     lookahead_steps = 8
 
-    use_wandb = True
+    use_wandb = False
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(
@@ -49,8 +49,11 @@ if __name__ == "__main__":
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer, device=device, batch_size=batch_size)
+
+
     trainer = Trainer(data_handler, joint_model, use_wandb=use_wandb)
-    fractal_zero = FractalZero(env, joint_model)  # TODO: move into Trainer?
+
+    fractal_zero = FractalZero(env, joint_model)
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
         game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps)

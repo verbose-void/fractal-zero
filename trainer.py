@@ -17,7 +17,7 @@ class Trainer:
         self.model = model
 
         # TODO: load from config
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.0005)
 
         self.use_wandb = use_wandb
         if self.use_wandb:
