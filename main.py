@@ -33,17 +33,18 @@ if __name__ == "__main__":
     out_features = 1
 
     num_games = 1024
-    train_every = 1
-    train_batches = 1
+    train_every = 16
+    train_batches = 4
     evaluate_every = 4
     batch_size = 128
-    learning_rate = 0.02
+    learning_rate = 0.001
 
     max_steps = 200
     num_walkers = 128
     balance = 1.2
 
     lookahead_steps = 64
+    evaluation_lookahead_steps = 64
     unroll_steps = 16
 
     use_wandb = True
@@ -73,7 +74,7 @@ if __name__ == "__main__":
             fractal_zero.eval()
 
             # TODO: move into trainer?
-            game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps, render=False)
+            game_history = fractal_zero.play_game(max_steps, num_walkers, evaluation_lookahead_steps, render=False)
             if use_wandb:
                 wandb.log({
                     "evaluation/episode_length": len(game_history),

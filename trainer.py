@@ -5,6 +5,8 @@ from fractal_zero import FractalZero
 
 import wandb
 
+from utils import mean_min_max_dict
+
 
 class FractalZeroTrainer:
     def __init__(
@@ -16,7 +18,8 @@ class FractalZeroTrainer:
 
         # TODO: load from config
         self.learning_rate = learning_rate
-        self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
+        # self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(self.fractal_zero.parameters(), lr=self.learning_rate)
         self.unroll_steps = unroll_steps
 
         self.use_wandb = use_wandb
@@ -74,14 +77,14 @@ class FractalZeroTrainer:
         auxiliary_loss = self.dynamics_model.auxiliary_loss(
             self.unrolled_auxiliaries, 
             self.target_auxiliaries,
-        )
+        ) / self.unroll_steps
 
         value_loss = self.prediction_model.value_loss(
             self.unrolled_values, 
             self.target_values
-        )
+        ) / self.unroll_steps
 
-        composite_loss = (auxiliary_loss + value_loss) / self.unroll_steps
+        composite_loss = auxiliary_loss + value_loss
 
         if self.use_wandb:
             wandb.log(
@@ -89,8 +92,8 @@ class FractalZeroTrainer:
                     "losses/auxiliary": auxiliary_loss.item(),
                     "losses/value": value_loss.item(),
                     "losses/composite": composite_loss.item(),
-                    "data/mean_auxiliary_targets": self.target_auxiliaries.mean(),
-                    "data/mean_value_targets": self.target_values.mean(),
+                    **mean_min_max_dict("data/auxiliary_targets", self.target_auxiliaries),
+                    **mean_min_max_dict("data/target_values", self.target_values),
                     "data/replay_buffer_size": len(self.data_handler.replay_buffer),
                 }
             )
