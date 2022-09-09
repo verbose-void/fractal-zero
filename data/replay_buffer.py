@@ -66,7 +66,9 @@ class ReplayBuffer:
         game_index = np.random.randint(0, len(self.game_histories))
         return self.game_histories[game_index]
 
-    def sample_game_clip(self, clip_length: int, pad_to_num_frames: bool = True) -> tuple:
+    def sample_game_clip(
+        self, clip_length: int, pad_to_num_frames: bool = True
+    ) -> tuple:
         assert clip_length > 0
 
         game = self.sample_game()
@@ -80,7 +82,13 @@ class ReplayBuffer:
         num_frames = clip_length if pad_to_num_frames else actual_num_frames
 
         observations = np.zeros((num_frames, *game.observation_shape), dtype=float)
-        actions = np.zeros((num_frames, *game.action_shape,), dtype=float)
+        actions = np.zeros(
+            (
+                num_frames,
+                *game.action_shape,
+            ),
+            dtype=float,
+        )
         rewards = np.zeros((num_frames,), dtype=float)
         values = np.zeros((num_frames,), dtype=float)
 
@@ -90,6 +98,6 @@ class ReplayBuffer:
         values[:actual_num_frames] = actual_frames[3]
 
         return observations, actions, rewards, values
-        
+
     def __len__(self):
         return len(self.game_histories)

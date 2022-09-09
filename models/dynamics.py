@@ -47,4 +47,3 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
 
         self.state = self.embedding_net(x)
         return self.auxiliary_net(self.state)
-        

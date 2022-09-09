@@ -10,9 +10,8 @@ import torch
 from models.joint_model import JointModel
 
 
-
 class FractalZero(torch.nn.Module):
-    def __init__(self, env: gym.Env, model: JointModel, balance: float=1):
+    def __init__(self, env: gym.Env, model: JointModel, balance: float = 1):
         super().__init__()
 
         self.env = env
@@ -40,13 +39,22 @@ class FractalZero(torch.nn.Module):
         action, value_estimate = self.model.prediction_model.forward(state)
         return action, value_estimate
 
-    def play_game(self, max_steps: int, num_walkers: int, lookahead_steps: int, render: bool = False, use_wandb_for_fmc: bool = False):
+    def play_game(
+        self,
+        max_steps: int,
+        num_walkers: int,
+        lookahead_steps: int,
+        render: bool = False,
+        use_wandb_for_fmc: bool = False,
+    ):
         # TODO: create config class
 
         obs = self.env.reset()
         game_history = GameHistory(obs)
 
-        self.fmc = FMC(num_walkers, self.model, balance=self.balance, use_wandb=use_wandb_for_fmc)
+        self.fmc = FMC(
+            num_walkers, self.model, balance=self.balance, use_wandb=use_wandb_for_fmc
+        )
 
         for _ in range(max_steps):
             obs = torch.tensor(obs, device=self.model.device)

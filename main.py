@@ -18,10 +18,6 @@ import wandb
 from tqdm import tqdm
 
 
-def generate_games():
-    pass
-
-
 if __name__ == "__main__":
     # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     device = torch.device("cpu")
@@ -54,16 +50,26 @@ if __name__ == "__main__":
         env, embedding_size, out_features=out_features
     )
     prediction_model = FullyConnectedPredictionModel(env, embedding_size)
-    joint_model = JointModel(representation_model, dynamics_model, prediction_model).to(device)
+    joint_model = JointModel(representation_model, dynamics_model, prediction_model).to(
+        device
+    )
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
     data_handler = DataHandler(env, replay_buffer, device=device, batch_size=batch_size)
 
     fractal_zero = FractalZero(env, joint_model, balance=balance)
-    trainer = FractalZeroTrainer(fractal_zero, data_handler, unroll_steps=unroll_steps, learning_rate=learning_rate, use_wandb=use_wandb)
+    trainer = FractalZeroTrainer(
+        fractal_zero,
+        data_handler,
+        unroll_steps=unroll_steps,
+        learning_rate=learning_rate,
+        use_wandb=use_wandb,
+    )
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
-        game_history = fractal_zero.play_game(max_steps, num_walkers, lookahead_steps, use_wandb_for_fmc=use_wandb)
+        game_history = fractal_zero.play_game(
+            max_steps, num_walkers, lookahead_steps, use_wandb_for_fmc=use_wandb
+        )
         replay_buffer.append(game_history)
 
         if i % train_every == 0:
@@ -74,9 +80,16 @@ if __name__ == "__main__":
             fractal_zero.eval()
 
             # TODO: move into trainer?
-            game_history = fractal_zero.play_game(max_steps, num_walkers, evaluation_lookahead_steps, render=False)
+            game_history = fractal_zero.play_game(
+                max_steps, num_walkers, evaluation_lookahead_steps, render=False
+            )
             if use_wandb:
-                wandb.log({
-                    "evaluation/episode_length": len(game_history),
-                    "evaluation/cumulative_reward": sum(game_history.environment_reward_signals),
-                }, commit=False)
+                wandb.log(
+                    {
+                        "evaluation/episode_length": len(game_history),
+                        "evaluation/cumulative_reward": sum(
+                            game_history.environment_reward_signals
+                        ),
+                    },
+                    commit=False,
+                )
