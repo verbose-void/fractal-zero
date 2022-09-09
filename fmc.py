@@ -91,14 +91,15 @@ class FMC:
         assert self.k > 0
 
         # TODO: explain all these variables
+        # NOTE: they should exist on the CPU.
         self.reward_buffer = torch.zeros(
-            size=(self.num_walkers, self.k, 1), dtype=float, device=self.device
+            size=(self.num_walkers, self.k, 1), dtype=float,
         )
         self.value_sum_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=float, device=self.device
+            size=(self.num_walkers, 1), dtype=float,
         )
         self.visit_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=int, device=self.device
+            size=(self.num_walkers, 1), dtype=int,
         )
         self.root_actions = None
         self.root_value_sum = 0
@@ -202,7 +203,7 @@ class FMC:
 
         self.clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
         r = np.random.uniform()
-        self.clone_mask = self.clone_probabilities >= r
+        self.clone_mask = (self.clone_probabilities >= r).cpu()
 
         if self.use_wandb:
             wandb.log(
