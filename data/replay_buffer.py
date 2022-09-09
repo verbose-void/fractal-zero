@@ -23,11 +23,6 @@ class GameHistory:
         self.environment_reward_signals.append(environment_reward_signal)
         self.values.append(value)
 
-    def empty_frame(self):
-        actual_obs, action, reward, value = self[0]
-        empty_obs = np.zeros_like(actual_obs)
-        return empty_obs, action, reward, value
-
     def __getitem__(self, index: int):
         return (
             self.observations[index],
@@ -95,10 +90,6 @@ class ReplayBuffer:
         values[:actual_num_frames] = actual_frames[3]
 
         return observations, actions, rewards, values
-
-    def empty_frames(self, reference_game_history: GameHistory, num_frames: int):
-        assert num_frames >= 0
-        return tuple(zip(*tuple([reference_game_history.empty_frame() for _ in range(num_frames)])))
         
     def __len__(self):
         return len(self.game_histories)
