@@ -17,7 +17,7 @@ class FullyConnectedPredictionModel(torch.nn.Module):
         self.value_head = torch.nn.Linear(embedding_size, 1)
 
         self.policy_loss = None  # TODO
-        self.value_loss = F.mse_loss
+        self.value_loss = F.cross_entropy
 
     def forward(self, embedding):
         policy_logits = self.policy_head(

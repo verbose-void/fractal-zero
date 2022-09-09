@@ -32,16 +32,16 @@ if __name__ == "__main__":
     embedding_size = 16
     out_features = 1
 
-    num_games = 1024
-    train_every = 16
-    train_batches = 4
-    evaluate_every = 4
-    batch_size = 128
-    learning_rate = 0.001
+    num_games = 10_000
+    train_every = 1
+    train_batches = 1
+    evaluate_every = 16
+    batch_size = 128  # NOTE: if the replay buffer isn't larger than the batch size, you will get many duplicate samples
+    learning_rate = 0.02
 
     max_steps = 200
-    num_walkers = 128
-    balance = 1.2
+    num_walkers = 64
+    balance = 1
 
     lookahead_steps = 64
     evaluation_lookahead_steps = 64

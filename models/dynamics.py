@@ -30,7 +30,7 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
         self.auxiliary_net = torch.nn.Sequential(
             torch.nn.Linear(self.embedding_size, self.out_features)
         )
-        self.auxiliary_loss = F.mse_loss
+        self.auxiliary_loss = F.cross_entropy
 
         self.state = None
 
