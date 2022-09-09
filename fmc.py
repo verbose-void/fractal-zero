@@ -2,9 +2,12 @@ import torch
 import numpy as np
 import networkx as nx
 
+import wandb
+
 import matplotlib.pyplot as plt
 
 from models.joint_model import JointModel
+from utils import mean_min_max_dict
 
 
 @torch.no_grad()
@@ -35,6 +38,7 @@ class FMC:
         balance: float = 1,
         verbose: bool = False,
         gamma: float = 0.99,
+        use_wandb: bool = False,
     ):
         self.num_walkers = num_walkers
         self.balance = balance
@@ -43,9 +47,13 @@ class FMC:
 
         self.model = model
 
+        self.use_wandb = use_wandb
+
     def set_state(self, state: torch.Tensor):
         # set the initial states for all walkers
-        batched_initial_state = torch.zeros((self.num_walkers, *state.shape), device=self.device)
+        batched_initial_state = torch.zeros(
+            (self.num_walkers, *state.shape), device=self.device
+        )
         batched_initial_state[:] = state
         self.dynamics_model.set_state(batched_initial_state)
 
@@ -86,8 +94,12 @@ class FMC:
         self.reward_buffer = torch.zeros(
             size=(self.num_walkers, self.k, 1), dtype=float, device=self.device
         )
-        self.value_sum_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=float, device=self.device)
-        self.visit_buffer = torch.zeros(size=(self.num_walkers, 1), dtype=int, device=self.device)
+        self.value_sum_buffer = torch.zeros(
+            size=(self.num_walkers, 1), dtype=float, device=self.device
+        )
+        self.visit_buffer = torch.zeros(
+            size=(self.num_walkers, 1), dtype=int, device=self.device
+        )
         self.root_actions = None
         self.root_value_sum = 0
         self.root_visits = 0
@@ -109,6 +121,19 @@ class FMC:
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
 
+        if self.use_wandb:
+            wandb.log(
+                {
+                    **mean_min_max_dict("fmc/visit_buffer", self.visit_buffer.float()),
+                    **mean_min_max_dict("fmc/value_sum_buffer", self.value_sum_buffer),
+                    **mean_min_max_dict(
+                        "fmc/average_value_buffer",
+                        self.value_sum_buffer / self.visit_buffer.float(),
+                    ),
+                },
+                commit=False,
+            )
+
         return self._get_highest_value_action()
 
     @torch.no_grad()
@@ -129,9 +154,7 @@ class FMC:
     def _assign_clone_partners(self):
         """For the cloning phase, walkers need a partner to determine if they should be sent as reinforcements to their partner's state."""
 
-        choices = np.random.choice(
-            np.arange(self.num_walkers), size=self.num_walkers
-        )
+        choices = np.random.choice(np.arange(self.num_walkers), size=self.num_walkers)
         self.clone_partners = torch.tensor(choices, dtype=int, device=self.device)
 
     @torch.no_grad()
@@ -153,10 +176,20 @@ class FMC:
         ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
-        activated_values = _relativize_vector(self.predicted_values).squeeze(-1)
-        activated_distances = _relativize_vector(self.distances)
+        rel_values = _relativize_vector(self.predicted_values).squeeze(-1)
+        rel_distances = _relativize_vector(self.distances)
+        self.virtual_rewards = (rel_values**self.balance) * rel_distances
 
-        self.virtual_rewards = activated_values * activated_distances ** self.balance
+        if self.use_wandb:
+            wandb.log(
+                {
+                    **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
+                    **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
+                    **mean_min_max_dict("fmc/distances", self.distances),
+                    **mean_min_max_dict("fmc/auxiliaries", self.rewards),
+                },
+                commit=False,
+            )
 
     @torch.no_grad()
     def _determine_clone_mask(self):
@@ -170,6 +203,14 @@ class FMC:
         self.clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
         r = np.random.uniform()
         self.clone_mask = self.clone_probabilities >= r
+
+        if self.use_wandb:
+            wandb.log(
+                {
+                    "fmc/num_cloned": self.clone_mask.sum(),
+                },
+                commit=False,
+            )
 
     @torch.no_grad()
     def _prepare_clone_variables(self):
@@ -252,7 +293,9 @@ class FMC:
 
         self.walker_values = self.value_sum_buffer / self.visit_buffer
         highest_value_walker_index = torch.argmax(self.walker_values)
-        highest_value_action = self.root_actions[highest_value_walker_index, 0].cpu().numpy()
+        highest_value_action = (
+            self.root_actions[highest_value_walker_index, 0].cpu().numpy()
+        )
 
         return highest_value_action
 

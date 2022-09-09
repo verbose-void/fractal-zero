@@ -1,64 +1,128 @@
 import torch
-import torch.nn.functional as F
 
 from data.data_handler import DataHandler
-from data.replay_buffer import ReplayBuffer
-from models.joint_model import JointModel
+from fractal_zero import FractalZero
 
 import wandb
 
+from utils import mean_min_max_dict
 
-class Trainer:
+
+class FractalZeroTrainer:
     def __init__(
-        self, data_handler: DataHandler, model: JointModel, use_wandb: bool = False
+        self,
+        fractal_zero: FractalZero,
+        data_handler: DataHandler,
+        unroll_steps: int,
+        learning_rate: float,
+        use_wandb: bool = False,
     ):
         self.data_handler = data_handler
 
-        self.model = model
+        self.fractal_zero = fractal_zero
 
         # TODO: load from config
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.0005)
+        self.learning_rate = learning_rate
+        # self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(
+            self.fractal_zero.parameters(), lr=self.learning_rate
+        )
+        self.unroll_steps = unroll_steps
 
         self.use_wandb = use_wandb
         if self.use_wandb:
             wandb.init(project="fractal_zero_cartpole")
 
-    def train_step(self):
-        self.optimizer.zero_grad()
+    @property
+    def representation_model(self):
+        return self.fractal_zero.model.representation_model
+
+    @property
+    def dynamics_model(self):
+        return self.fractal_zero.model.dynamics_model
+
+    @property
+    def prediction_model(self):
+        return self.fractal_zero.model.prediction_model
+
+    def _get_batch(self):
+        batch = self.data_handler.get_batch(self.unroll_steps)
 
         (
-            observations,
-            actions,
-            reward_targets,
-            value_targets,
-        ) = self.data_handler.get_batch()
+            self.observations,
+            self.actions,
+            self.target_auxiliaries,
+            self.target_values,
+        ) = batch
 
-        hidden_states = self.model.representation_model(observations)
+        return batch
 
-        # TODO: unroll model from initial hidden state
+    def _unroll(self):
+        # TODO: docstring
 
-        self.model.dynamics_model.set_state(hidden_states)
-        reward_predictions = self.model.dynamics_model(actions)
+        first_observations = self.observations[:, 0]
+        first_hidden_states = self.representation_model.forward(first_observations)
 
-        policy_logits, value_predictions = self.model.prediction_model(
-            self.model.dynamics_model.state
+        self.dynamics_model.set_state(first_hidden_states)
+
+        # preallocate unroll prediction arrays
+        self.unrolled_auxiliaries = torch.zeros_like(self.target_auxiliaries)
+        self.unrolled_values = torch.zeros_like(self.target_values)
+
+        # fill arrays
+        for unroll_step in range(self.unroll_steps):
+            step_actions = self.actions[:, unroll_step]
+            self.unrolled_auxiliaries[:, unroll_step] = self.dynamics_model(
+                step_actions
+            )
+
+            state = self.dynamics_model.state
+            _, value_predictions = self.prediction_model.forward(state)
+            # TODO: unroll policy
+
+            self.unrolled_values[:, unroll_step] = value_predictions
+
+    def _calculate_losses(self):
+        auxiliary_loss = (
+            self.dynamics_model.auxiliary_loss(
+                self.unrolled_auxiliaries,
+                self.target_auxiliaries,
+            )
+            / self.unroll_steps
         )
 
-        reward_loss = F.mse_loss(reward_predictions, reward_targets)
-        value_loss = F.mse_loss(value_predictions, value_targets)
+        value_loss = (
+            self.prediction_model.value_loss(self.unrolled_values, self.target_values)
+            / self.unroll_steps
+        )
 
-        cum_loss = reward_loss + value_loss
-        cum_loss.backward()
+        composite_loss = auxiliary_loss + value_loss
 
         if self.use_wandb:
             wandb.log(
                 {
-                    "reward_loss": reward_loss.item(),
-                    "mean_reward_targets": torch.mean(reward_targets),
-                    "value_loss": value_loss.item(),
-                    "cum_loss": cum_loss.item(),
-                    "mean_value_targets": value_targets.mean(),
+                    "losses/auxiliary": auxiliary_loss.item(),
+                    "losses/value": value_loss.item(),
+                    "losses/composite": composite_loss.item(),
+                    **mean_min_max_dict(
+                        "data/auxiliary_targets", self.target_auxiliaries
+                    ),
+                    **mean_min_max_dict("data/target_values", self.target_values),
+                    "data/replay_buffer_size": len(self.data_handler.replay_buffer),
                 }
             )
+
+        return composite_loss
+
+    def train_step(self):
+        self.fractal_zero.train()
+
+        self.optimizer.zero_grad()
+
+        self._get_batch()
+        self._unroll()
+
+        composite_loss = self._calculate_losses()
+        composite_loss.backward()
 
         self.optimizer.step()
