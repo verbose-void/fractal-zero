@@ -3,16 +3,16 @@ from time import sleep
 import gym
 
 import torch
-from data.data_handler import DataHandler
-from fmc import FMC
-from fractal_zero import FractalZero
+from fractal_zero.data.data_handler import DataHandler
+from fractal_zero.fmc import FMC
+from fractal_zero.fractal_zero import FractalZero
 
-from models.dynamics import FullyConnectedDynamicsModel
-from models.joint_model import JointModel
-from models.prediction import FullyConnectedPredictionModel
-from models.representation import FullyConnectedRepresentationModel
-from data.replay_buffer import ReplayBuffer
-from trainer import FractalZeroTrainer
+from fractal_zero.models.dynamics import FullyConnectedDynamicsModel
+from fractal_zero.models.joint_model import JointModel
+from fractal_zero.models.prediction import FullyConnectedPredictionModel
+from fractal_zero.models.representation import FullyConnectedRepresentationModel
+from fractal_zero.data.replay_buffer import ReplayBuffer
+from fractal_zero.trainer import FractalZeroTrainer
 
 import wandb
 from tqdm import tqdm
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     evaluation_lookahead_steps = 64
     unroll_steps = 16
 
-    use_wandb = True
+    use_wandb = False
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(

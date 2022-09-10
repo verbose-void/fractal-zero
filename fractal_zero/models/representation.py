@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import gym
 
-from utils import get_space_shape
+from fractal_zero.utils import get_space_shape
 
 
 class FullyConnectedRepresentationModel(torch.nn.Module):

@@ -2,8 +2,8 @@ from typing import Tuple
 import gym
 import torch
 import numpy as np
-from data.replay_buffer import ReplayBuffer
-from utils import get_space_shape
+from fractal_zero.data.replay_buffer import ReplayBuffer
+from fractal_zero.utils import get_space_shape
 
 
 class DataHandler:

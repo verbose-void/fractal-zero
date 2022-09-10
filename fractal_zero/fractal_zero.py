@@ -2,12 +2,12 @@ from ctypes import Union
 from time import sleep
 from typing import Optional
 import gym
-from data.replay_buffer import GameHistory
-from fmc import FMC
 
 import torch
 
-from models.joint_model import JointModel
+from fractal_zero.data.replay_buffer import GameHistory
+from fractal_zero.fmc import FMC
+from fractal_zero.models.joint_model import JointModel
 
 
 class FractalZero(torch.nn.Module):

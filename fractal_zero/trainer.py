@@ -1,11 +1,10 @@
 import torch
 
-from data.data_handler import DataHandler
-from fractal_zero import FractalZero
-
 import wandb
 
-from utils import mean_min_max_dict
+from fractal_zero.data.data_handler import DataHandler
+from fractal_zero.fractal_zero import FractalZero
+from fractal_zero.utils import mean_min_max_dict
 
 
 class FractalZeroTrainer:

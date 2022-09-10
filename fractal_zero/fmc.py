@@ -6,8 +6,8 @@ import wandb
 
 import matplotlib.pyplot as plt
 
-from models.joint_model import JointModel
-from utils import mean_min_max_dict
+from fractal_zero.models.joint_model import JointModel
+from fractal_zero.utils import mean_min_max_dict
 
 
 @torch.no_grad()
