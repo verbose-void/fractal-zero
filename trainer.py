@@ -109,6 +109,7 @@ class FractalZeroTrainer:
                     ),
                     **mean_min_max_dict("data/target_values", self.target_values),
                     "data/replay_buffer_size": len(self.data_handler.replay_buffer),
+                    **mean_min_max_dict("data/replay_buffer_episode_lengths", self.data_handler.replay_buffer.get_episode_lengths()),
                     "data/batch_size": len(self.target_auxiliaries),
                 }
             )

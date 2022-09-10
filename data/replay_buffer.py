@@ -99,5 +99,8 @@ class ReplayBuffer:
 
         return observations, actions, rewards, values
 
+    def get_episode_lengths(self):
+        return [len(history) for history in self.game_histories]
+
     def __len__(self):
         return len(self.game_histories)
