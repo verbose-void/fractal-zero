@@ -1,9 +1,5 @@
-from dataclasses import asdict
-from this import d
-from time import sleep
 import gym
 
-import torch
 from fractal_zero.config import FractalZeroConfig
 from fractal_zero.data.data_handler import DataHandler
 from fractal_zero.fmc import FMC
@@ -13,7 +9,6 @@ from fractal_zero.models.dynamics import FullyConnectedDynamicsModel
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.models.prediction import FullyConnectedPredictionModel
 from fractal_zero.models.representation import FullyConnectedRepresentationModel
-from fractal_zero.data.replay_buffer import ReplayBuffer
 from fractal_zero.trainer import FractalZeroTrainer
 
 import wandb
@@ -29,6 +24,7 @@ if __name__ == "__main__":
     train_every = 1
     train_batches = 2
     evaluate_every = 16
+    checkpoint_every = 128
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(
@@ -94,3 +90,6 @@ if __name__ == "__main__":
                     },
                     commit=False,
                 )
+
+        if i % checkpoint_every == 0:
+            trainer.save_checkpoint()

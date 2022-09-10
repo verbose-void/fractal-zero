@@ -1,7 +1,8 @@
-from dataclasses import asdict
+from datetime import datetime
 import torch
 
 import wandb
+import os
 
 from fractal_zero.data.data_handler import DataHandler
 from fractal_zero.fractal_zero import FractalZero
@@ -35,6 +36,11 @@ class FractalZeroTrainer:
                     "The config field in `wandb_config` will be automatically set using the FractalZeroConfig."
                 )
             wandb.init(**self.config.wandb_config, config=self.config.asdict())
+            self.wandb_run_name = wandb.run.name
+        else:
+            self.wandb_run_name = None
+
+        self.completed_train_steps = 0
 
     @property
     def representation_model(self):
@@ -134,3 +140,20 @@ class FractalZeroTrainer:
         composite_loss.backward()
 
         self.optimizer.step()
+
+        self.completed_train_steps += 1
+
+    @property
+    def checkpoint_name(self) -> str:
+        if self.wandb_run_name:
+            return f"{self.wandb_run_name}.checkpoint"
+        time_str = datetime.now().strftime("%Y-%m-%d_%I-%M-%S_%p")
+        return f"{time_str}.checkpoint"
+
+    def save_checkpoint(self, folder: str="checkpoints") -> str:
+        # TODO: optionally save to wandb
+
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, self.checkpoint_name)
+        torch.save(self, path)
+        return path
