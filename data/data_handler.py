@@ -8,13 +8,13 @@ from utils import get_space_shape
 
 class DataHandler:
     def __init__(
-        self, env: gym.Env, replay_buffer: ReplayBuffer, device, batch_size: int = 8
+        self, env: gym.Env, replay_buffer: ReplayBuffer, device, max_batch_size: int = 8
     ):
         self.replay_buffer = replay_buffer
         self.device = device
 
         # TODO: config
-        self.batch_size = batch_size
+        self.max_batch_size = max_batch_size
 
         self.observation_shape = get_space_shape(env.observation_space)
         self.action_shape = get_space_shape(env.action_space)
@@ -28,28 +28,30 @@ class DataHandler:
 
         assert num_frames > 0
 
+        batch_size = min(len(self.replay_buffer), self.max_batch_size)
+
         observations = np.zeros(
-            (self.batch_size, num_frames, *self.observation_shape), dtype=float
+            (batch_size, num_frames, *self.observation_shape), dtype=float
         )
         actions = np.zeros(
-            (self.batch_size, num_frames, *self.action_shape), dtype=float
+            (batch_size, num_frames, *self.action_shape), dtype=float
         )
         auxiliaries = np.zeros(
             (
-                self.batch_size,
+                batch_size,
                 num_frames,
             ),
             dtype=float,
         )
         values = np.zeros(
             (
-                self.batch_size,
+                batch_size,
                 num_frames,
             ),
             dtype=float,
         )
 
-        for i in range(self.batch_size):
+        for i in range(batch_size):
             (
                 gobservations,
                 gactions,
