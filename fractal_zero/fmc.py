@@ -91,16 +91,20 @@ class FMC:
         # TODO: explain all these variables
         # NOTE: they should exist on the CPU.
         self.reward_buffer = torch.zeros(
-            size=(self.num_walkers, self.k, 1), dtype=float,
+            size=(self.num_walkers, self.k, 1),
+            dtype=float,
         )
         self.value_sum_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=float,
+            size=(self.num_walkers, 1),
+            dtype=float,
         )
         self.visit_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=int,
+            size=(self.num_walkers, 1),
+            dtype=int,
         )
         self.clone_receives = torch.zeros(
-            size=(self.num_walkers, 1), dtype=int,
+            size=(self.num_walkers, 1),
+            dtype=int,
         )
 
         self.root_actions = None
@@ -133,7 +137,9 @@ class FMC:
                         "fmc/average_value_buffer",
                         self.value_sum_buffer / self.visit_buffer.float(),
                     ),
-                    **mean_min_max_dict("fmc/clone_receives", self.clone_receives.float()),
+                    **mean_min_max_dict(
+                        "fmc/clone_receives", self.clone_receives.float()
+                    ),
                 },
                 commit=False,
             )
@@ -251,8 +257,12 @@ class FMC:
             print("state before", self.state)
 
         # keep track of which walkers received clones and how many.
-        clones_received_per_walker = torch.bincount(self.clone_partners[self.clone_mask]).unsqueeze(-1)
-        self.clone_receives[:len(clones_received_per_walker)] += clones_received_per_walker
+        clones_received_per_walker = torch.bincount(
+            self.clone_partners[self.clone_mask]
+        ).unsqueeze(-1)
+        self.clone_receives[
+            : len(clones_received_per_walker)
+        ] += clones_received_per_walker
 
         # execute clones
         self._clone_vector(self.state)
@@ -284,7 +294,8 @@ class FMC:
         current_value_buffer = torch.zeros_like(self.value_sum_buffer)
         for i in reversed(range(self.simulation_iteration)):
             current_value_buffer[mask] = (
-                self.reward_buffer[mask, i] + current_value_buffer[mask] * self.config.gamma
+                self.reward_buffer[mask, i]
+                + current_value_buffer[mask] * self.config.gamma
             )
 
         self.value_sum_buffer += current_value_buffer

@@ -7,7 +7,9 @@ from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import get_space_shape
 
 
-DEFAULT_DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+DEFAULT_DEVICE = (
+    torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+)
 
 
 @dataclass

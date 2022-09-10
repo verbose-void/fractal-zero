@@ -66,7 +66,11 @@ if __name__ == "__main__":
         data_handler,
     )
 
-    for i in tqdm(range(config.num_games), desc="Playing games and training", total=config.num_games):
+    for i in tqdm(
+        range(config.num_games),
+        desc="Playing games and training",
+        total=config.num_games,
+    ):
         fractal_zero.train()
         game_history = fractal_zero.play_game()
         data_handler.replay_buffer.append(game_history)

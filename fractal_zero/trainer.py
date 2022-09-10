@@ -21,7 +21,9 @@ class FractalZeroTrainer:
         self.fractal_zero = fractal_zero
 
         if self.config.optimizer.lower() == "sgd":
-            self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.config.learning_rate)
+            self.optimizer = torch.optim.SGD(
+                self.fractal_zero.parameters(), lr=self.config.learning_rate
+            )
         elif self.config.optimizer.lower() == "adam":
             self.optimizer = torch.optim.Adam(
                 self.fractal_zero.parameters(), lr=self.config.learning_rate
@@ -29,7 +31,9 @@ class FractalZeroTrainer:
 
         if self.config.use_wandb:
             if "config" in self.config.wandb_config:
-                raise KeyError("The config field in `wandb_config` will be automatically set using the FractalZeroConfig.")
+                raise KeyError(
+                    "The config field in `wandb_config` will be automatically set using the FractalZeroConfig."
+                )
             wandb.init(**self.config.wandb_config, config=self.config.asdict())
 
     @property
@@ -108,7 +112,10 @@ class FractalZeroTrainer:
                     ),
                     **mean_min_max_dict("data/target_values", self.target_values),
                     "data/replay_buffer_size": len(self.data_handler.replay_buffer),
-                    **mean_min_max_dict("data/replay_buffer_episode_lengths", self.data_handler.replay_buffer.get_episode_lengths()),
+                    **mean_min_max_dict(
+                        "data/replay_buffer_episode_lengths",
+                        self.data_handler.replay_buffer.get_episode_lengths(),
+                    ),
                     "data/batch_size": len(self.target_auxiliaries),
                 }
             )

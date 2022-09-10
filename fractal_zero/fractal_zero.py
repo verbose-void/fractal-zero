@@ -30,7 +30,7 @@ class FractalZero(torch.nn.Module):
         else:
             greedy_action = True
             k = self.config.evaluation_lookahead_steps
-        
+
         if self.config.lookahead_steps > 0:
             self.fmc.set_state(state)
             action = self.fmc.simulate(k, greedy_action=greedy_action)
