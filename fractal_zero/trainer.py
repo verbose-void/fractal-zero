@@ -12,24 +12,21 @@ class FractalZeroTrainer:
         self,
         fractal_zero: FractalZero,
         data_handler: DataHandler,
-        unroll_steps: int,
-        learning_rate: float,
-        use_wandb: bool = False,
     ):
+        self.config = fractal_zero.config
+
         self.data_handler = data_handler
 
         self.fractal_zero = fractal_zero
 
-        # TODO: load from config
-        self.learning_rate = learning_rate
-        self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
-        # self.optimizer = torch.optim.Adam(
-            # self.fractal_zero.parameters(), lr=self.learning_rate
-        # )
-        self.unroll_steps = unroll_steps
+        if self.config.optimizer.lower() == "sgd":
+            self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.config.learning_rate)
+        elif self.config.optimizer.lower() == "adam":
+            self.optimizer = torch.optim.Adam(
+                self.fractal_zero.parameters(), lr=self.config.learning_rate
+            )
 
-        self.use_wandb = use_wandb
-        if self.use_wandb:
+        if self.config.use_wandb:
             wandb.init(project="fractal_zero_cartpole")
 
     @property
@@ -45,7 +42,7 @@ class FractalZeroTrainer:
         return self.fractal_zero.model.prediction_model
 
     def _get_batch(self):
-        batch = self.data_handler.get_batch(self.unroll_steps)
+        batch = self.data_handler.get_batch(self.config.unroll_steps)
 
         (
             self.observations,
@@ -69,7 +66,7 @@ class FractalZeroTrainer:
         self.unrolled_values = torch.zeros_like(self.target_values)
 
         # fill arrays
-        for unroll_step in range(self.unroll_steps):
+        for unroll_step in range(self.config.unroll_steps):
             step_actions = self.actions[:, unroll_step]
             self.unrolled_auxiliaries[:, unroll_step] = self.dynamics_model(
                 step_actions
@@ -87,17 +84,17 @@ class FractalZeroTrainer:
                 self.unrolled_auxiliaries,
                 self.target_auxiliaries,
             )
-            / self.unroll_steps
+            / self.config.unroll_steps
         )
 
         value_loss = (
             self.prediction_model.value_loss(self.unrolled_values, self.target_values)
-            / self.unroll_steps
+            / self.config.unroll_steps
         )
 
         composite_loss = auxiliary_loss + value_loss
 
-        if self.use_wandb:
+        if self.config.use_wandb:
             wandb.log(
                 {
                     "losses/auxiliary": auxiliary_loss.item(),

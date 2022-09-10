@@ -1,9 +1,7 @@
-from ctypes import Union
 from time import sleep
-from typing import Optional
-import gym
 
 import torch
+from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.data.replay_buffer import GameHistory
 from fractal_zero.fmc import FMC
@@ -11,30 +9,31 @@ from fractal_zero.models.joint_model import JointModel
 
 
 class FractalZero(torch.nn.Module):
-    def __init__(self, env: gym.Env, model: JointModel, balance: float = 1):
+    def __init__(self, config: FractalZeroConfig):
         super().__init__()
 
-        self.env = env
-        self.model = model
+        self.config = config
+
+        self.model = self.config.joint_model
 
         # TODO: reuse FMC instance?
         self.fmc = None
-        # TODO: move into config
-        self.balance = balance
 
-    def forward(self, observation, lookahead_steps: int = 0):
+    def forward(self, observation):
         # TODO: docstring, note that lookahead_steps == 0 means there won't be a tree search
-
-        if lookahead_steps < 0:
-            raise ValueError(f"Lookahead steps must be >= 0. Got {lookahead_steps}")
 
         state = self.model.representation_model.forward(observation)
 
-        greedy_action = not self.training
+        if self.training:
+            greedy_action = False
+            k = self.config.lookahead_steps
+        else:
+            greedy_action = True
+            k = self.config.evaluation_lookahead_steps
         
-        if lookahead_steps > 0:
+        if self.config.lookahead_steps > 0:
             self.fmc.set_state(state)
-            action = self.fmc.simulate(lookahead_steps, greedy_action=greedy_action)
+            action = self.fmc.simulate(k, greedy_action=greedy_action)
             return action, self.fmc.root_value
 
         raise NotImplementedError("Action prediction not yet working.")
@@ -43,25 +42,21 @@ class FractalZero(torch.nn.Module):
 
     def play_game(
         self,
-        max_steps: int,
-        num_walkers: int,
-        lookahead_steps: int,
         render: bool = False,
-        use_wandb_for_fmc: bool = False,
     ):
         # TODO: create config class
 
-        obs = self.env.reset()
+        env = self.config.env
+
+        obs = env.reset()
         game_history = GameHistory(obs)
 
-        self.fmc = FMC(
-            num_walkers, self.model, balance=self.balance, use_wandb=use_wandb_for_fmc
-        )
+        self.fmc = FMC(self.config, verbose=False)
 
-        for _ in range(max_steps):
-            obs = torch.tensor(obs, device=self.model.device)
-            action, value_estimate = self.forward(obs, lookahead_steps=lookahead_steps)
-            obs, reward, done, info = self.env.step(action)
+        for _ in range(self.config.max_game_steps):
+            obs = torch.tensor(obs, device=self.config.device)
+            action, value_estimate = self.forward(obs)
+            obs, reward, done, info = env.step(action)
 
             game_history.append(action, obs, reward, value_estimate)
 
@@ -69,7 +64,7 @@ class FractalZero(torch.nn.Module):
                 break
 
             if render:
-                self.env.render()
+                env.render()
                 sleep(0.1)
 
         return game_history

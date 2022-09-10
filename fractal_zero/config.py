@@ -20,6 +20,7 @@ class FractalZeroConfig:
     max_game_steps: int = 200
 
     max_batch_size: int = 128
+    gamma: float = 0.99
     unroll_steps: int = 16
     learning_rate: float = 0.001
     optimizer: str = "SGD"

@@ -50,7 +50,7 @@ if __name__ == "__main__":
         balance=1.0,
         lookahead_steps=64,
         evaluation_lookahead_steps=64,
-        wandb_config={"project": "fractal_zero_cartpole"},
+        # wandb_config={"project": "fractal_zero_cartpole"},
     )
 
     # TODO: make this logic automatic in config somehow?
@@ -58,23 +58,17 @@ if __name__ == "__main__":
 
     data_handler = DataHandler(config)
 
-    exit()
+    fractal_zero = FractalZero(config)
 
-    fractal_zero = FractalZero(env, joint_model, balance=balance)
     trainer = FractalZeroTrainer(
         fractal_zero,
         data_handler,
-        unroll_steps=unroll_steps,
-        learning_rate=learning_rate,
-        use_wandb=use_wandb,
     )
 
-    for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
+    for i in tqdm(range(config.num_games), desc="Playing games and training", total=config.num_games):
         fractal_zero.train()
-        game_history = fractal_zero.play_game(
-            max_steps, num_walkers, lookahead_steps, use_wandb_for_fmc=use_wandb
-        )
-        replay_buffer.append(game_history)
+        game_history = fractal_zero.play_game()
+        data_handler.replay_buffer.append(game_history)
 
         if i % train_every == 0:
             for _ in range(train_batches):
@@ -83,10 +77,9 @@ if __name__ == "__main__":
         if i % evaluate_every == 0:
             # TODO: move into trainer?
             fractal_zero.eval()
-            game_history = fractal_zero.play_game(
-                max_steps, num_walkers, evaluation_lookahead_steps, render=False
-            )
-            if use_wandb:
+            game_history = fractal_zero.play_game()
+
+            if config.use_wandb:
                 wandb.log(
                     {
                         "evaluation/episode_length": len(game_history),
