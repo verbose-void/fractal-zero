@@ -5,9 +5,10 @@ import networkx as nx
 import wandb
 
 import matplotlib.pyplot as plt
+from fractal_zero.config import FractalZeroConfig
 
-from models.joint_model import JointModel
-from utils import mean_min_max_dict
+from fractal_zero.models.joint_model import JointModel
+from fractal_zero.utils import mean_min_max_dict
 
 
 @torch.no_grad()
@@ -33,29 +34,26 @@ class FMC:
 
     def __init__(
         self,
-        num_walkers: int,
-        model: JointModel,
-        balance: float = 1,
+        config: FractalZeroConfig,
         verbose: bool = False,
-        gamma: float = 0.99,
-        use_wandb: bool = False,
     ):
-        self.num_walkers = num_walkers
-        self.balance = balance
+        self.config = config
+
+        self.model = config.joint_model
+
         self.verbose = verbose
-        self.gamma = gamma
-
-        self.model = model
-
-        self.use_wandb = use_wandb
 
     def set_state(self, state: torch.Tensor):
         # set the initial states for all walkers
         batched_initial_state = torch.zeros(
-            (self.num_walkers, *state.shape), device=self.device
+            (self.num_walkers, *state.shape), device=self.config.device
         )
         batched_initial_state[:] = state
         self.dynamics_model.set_state(batched_initial_state)
+
+    @property
+    def num_walkers(self) -> int:
+        return self.config.num_walkers
 
     @property
     def device(self):
@@ -93,16 +91,20 @@ class FMC:
         # TODO: explain all these variables
         # NOTE: they should exist on the CPU.
         self.reward_buffer = torch.zeros(
-            size=(self.num_walkers, self.k, 1), dtype=float,
+            size=(self.num_walkers, self.k, 1),
+            dtype=float,
         )
         self.value_sum_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=float,
+            size=(self.num_walkers, 1),
+            dtype=float,
         )
         self.visit_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=int,
+            size=(self.num_walkers, 1),
+            dtype=int,
         )
         self.clone_receives = torch.zeros(
-            size=(self.num_walkers, 1), dtype=int,
+            size=(self.num_walkers, 1),
+            dtype=int,
         )
 
         self.root_actions = None
@@ -126,7 +128,7 @@ class FMC:
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
 
-        if self.use_wandb:
+        if self.config.use_wandb:
             wandb.log(
                 {
                     **mean_min_max_dict("fmc/visit_buffer", self.visit_buffer.float()),
@@ -135,7 +137,9 @@ class FMC:
                         "fmc/average_value_buffer",
                         self.value_sum_buffer / self.visit_buffer.float(),
                     ),
-                    **mean_min_max_dict("fmc/clone_receives", self.clone_receives.float()),
+                    **mean_min_max_dict(
+                        "fmc/clone_receives", self.clone_receives.float()
+                    ),
                 },
                 commit=False,
             )
@@ -154,10 +158,10 @@ class FMC:
         for _ in range(self.num_walkers):
             action = self.dynamics_model.action_space.sample()
             actions.append(action)
-        self.actions = torch.tensor(actions, device=self.device).unsqueeze(-1)
+        self.actions = torch.tensor(actions, device=self.config.device).unsqueeze(-1)
 
         if self.root_actions is None:
-            self.root_actions = torch.tensor(self.actions, device=self.device)
+            self.root_actions = self.actions.cpu().detach().clone()
 
     @torch.no_grad()
     def _assign_clone_partners(self):
@@ -187,9 +191,9 @@ class FMC:
 
         rel_values = _relativize_vector(self.predicted_values).squeeze(-1)
         rel_distances = _relativize_vector(self.distances)
-        self.virtual_rewards = (rel_values**self.balance) * rel_distances
+        self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
 
-        if self.use_wandb:
+        if self.config.use_wandb:
             wandb.log(
                 {
                     **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
@@ -213,7 +217,7 @@ class FMC:
         r = np.random.uniform()
         self.clone_mask = (self.clone_probabilities >= r).cpu()
 
-        if self.use_wandb:
+        if self.config.use_wandb:
             wandb.log(
                 {
                     "fmc/num_cloned": self.clone_mask.sum(),
@@ -253,8 +257,12 @@ class FMC:
             print("state before", self.state)
 
         # keep track of which walkers received clones and how many.
-        clones_received_per_walker = torch.bincount(self.clone_partners[self.clone_mask]).unsqueeze(-1)
-        self.clone_receives[:len(clones_received_per_walker)] += clones_received_per_walker
+        clones_received_per_walker = torch.bincount(
+            self.clone_partners[self.clone_mask]
+        ).unsqueeze(-1)
+        self.clone_receives[
+            : len(clones_received_per_walker)
+        ] += clones_received_per_walker
 
         # execute clones
         self._clone_vector(self.state)
@@ -286,7 +294,8 @@ class FMC:
         current_value_buffer = torch.zeros_like(self.value_sum_buffer)
         for i in reversed(range(self.simulation_iteration)):
             current_value_buffer[mask] = (
-                self.reward_buffer[mask, i] + current_value_buffer[mask] * self.gamma
+                self.reward_buffer[mask, i]
+                + current_value_buffer[mask] * self.config.gamma
             )
 
         self.value_sum_buffer += current_value_buffer

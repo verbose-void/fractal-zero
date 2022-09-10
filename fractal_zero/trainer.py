@@ -1,11 +1,11 @@
+from dataclasses import asdict
 import torch
-
-from data.data_handler import DataHandler
-from fractal_zero import FractalZero
 
 import wandb
 
-from utils import mean_min_max_dict
+from fractal_zero.data.data_handler import DataHandler
+from fractal_zero.fractal_zero import FractalZero
+from fractal_zero.utils import mean_min_max_dict
 
 
 class FractalZeroTrainer:
@@ -13,25 +13,28 @@ class FractalZeroTrainer:
         self,
         fractal_zero: FractalZero,
         data_handler: DataHandler,
-        unroll_steps: int,
-        learning_rate: float,
-        use_wandb: bool = False,
     ):
+        self.config = fractal_zero.config
+
         self.data_handler = data_handler
 
         self.fractal_zero = fractal_zero
 
-        # TODO: load from config
-        self.learning_rate = learning_rate
-        self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
-        # self.optimizer = torch.optim.Adam(
-            # self.fractal_zero.parameters(), lr=self.learning_rate
-        # )
-        self.unroll_steps = unroll_steps
+        if self.config.optimizer.lower() == "sgd":
+            self.optimizer = torch.optim.SGD(
+                self.fractal_zero.parameters(), lr=self.config.learning_rate
+            )
+        elif self.config.optimizer.lower() == "adam":
+            self.optimizer = torch.optim.Adam(
+                self.fractal_zero.parameters(), lr=self.config.learning_rate
+            )
 
-        self.use_wandb = use_wandb
-        if self.use_wandb:
-            wandb.init(project="fractal_zero_cartpole")
+        if self.config.use_wandb:
+            if "config" in self.config.wandb_config:
+                raise KeyError(
+                    "The config field in `wandb_config` will be automatically set using the FractalZeroConfig."
+                )
+            wandb.init(**self.config.wandb_config, config=self.config.asdict())
 
     @property
     def representation_model(self):
@@ -46,7 +49,7 @@ class FractalZeroTrainer:
         return self.fractal_zero.model.prediction_model
 
     def _get_batch(self):
-        batch = self.data_handler.get_batch(self.unroll_steps)
+        batch = self.data_handler.get_batch(self.config.unroll_steps)
 
         (
             self.observations,
@@ -70,7 +73,7 @@ class FractalZeroTrainer:
         self.unrolled_values = torch.zeros_like(self.target_values)
 
         # fill arrays
-        for unroll_step in range(self.unroll_steps):
+        for unroll_step in range(self.config.unroll_steps):
             step_actions = self.actions[:, unroll_step]
             self.unrolled_auxiliaries[:, unroll_step] = self.dynamics_model(
                 step_actions
@@ -88,17 +91,17 @@ class FractalZeroTrainer:
                 self.unrolled_auxiliaries,
                 self.target_auxiliaries,
             )
-            / self.unroll_steps
+            / self.config.unroll_steps
         )
 
         value_loss = (
             self.prediction_model.value_loss(self.unrolled_values, self.target_values)
-            / self.unroll_steps
+            / self.config.unroll_steps
         )
 
         composite_loss = auxiliary_loss + value_loss
 
-        if self.use_wandb:
+        if self.config.use_wandb:
             wandb.log(
                 {
                     "losses/auxiliary": auxiliary_loss.item(),
@@ -109,6 +112,10 @@ class FractalZeroTrainer:
                     ),
                     **mean_min_max_dict("data/target_values", self.target_values),
                     "data/replay_buffer_size": len(self.data_handler.replay_buffer),
+                    **mean_min_max_dict(
+                        "data/replay_buffer_episode_lengths",
+                        self.data_handler.replay_buffer.get_episode_lengths(),
+                    ),
                     "data/batch_size": len(self.target_auxiliaries),
                 }
             )

@@ -1,5 +1,7 @@
 import numpy as np
 
+from fractal_zero.config import FractalZeroConfig
+
 
 class GameHistory:
     def __init__(self, initial_observation):
@@ -45,21 +47,21 @@ class GameHistory:
 
 
 class ReplayBuffer:
-    def __init__(self, max_size: int):
+    def __init__(self, config: FractalZeroConfig):
         # TODO: prioritized experience replay (PER) https://arxiv.org/abs/1511.05952
 
-        self.max_size = max_size
+        self.config = config
 
         self.game_histories = []
 
     def append(self, game_history: GameHistory):
-        if len(self) >= self.max_size:
+        if len(self) >= self.config.max_replay_buffer_size:
             # first in, first out.
             self.game_histories.pop(0)
 
         self.game_histories.append(game_history)
 
-        if len(self) > self.max_size:
+        if len(self) > self.config.max_replay_buffer_size:
             raise ValueError
 
     def sample_game(self) -> GameHistory:
@@ -98,6 +100,9 @@ class ReplayBuffer:
         values[:actual_num_frames] = actual_frames[3]
 
         return observations, actions, rewards, values
+
+    def get_episode_lengths(self):
+        return [len(history) for history in self.game_histories]
 
     def __len__(self):
         return len(self.game_histories)

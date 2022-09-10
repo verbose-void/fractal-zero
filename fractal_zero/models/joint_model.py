@@ -1,8 +1,8 @@
 import torch
 
-from models.dynamics import FullyConnectedDynamicsModel
-from models.prediction import FullyConnectedPredictionModel
-from models.representation import FullyConnectedRepresentationModel
+from fractal_zero.models.dynamics import FullyConnectedDynamicsModel
+from fractal_zero.models.prediction import FullyConnectedPredictionModel
+from fractal_zero.models.representation import FullyConnectedRepresentationModel
 
 
 class JointModel(torch.nn.Module):

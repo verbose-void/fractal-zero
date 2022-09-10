@@ -13,7 +13,10 @@ def get_space_shape(space):
     raise NotImplementedError(f"Type not supported: {type(space)}")
 
 
-def mean_min_max_dict(name: str, arr: torch.Tensor) -> dict:
+def mean_min_max_dict(name: str, arr) -> dict:
+    if isinstance(arr, list):
+        arr = torch.tensor(arr, dtype=float)
+
     return {
         f"{name}/mean": arr.mean(),
         f"{name}/min": arr.min(),

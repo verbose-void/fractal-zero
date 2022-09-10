@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import gym
 import numpy as np
 
-from utils import get_space_shape
+from fractal_zero.utils import get_space_shape
 
 
 class FullyConnectedPredictionModel(torch.nn.Module):
