@@ -2,7 +2,6 @@ import gym
 
 from fractal_zero.config import FractalZeroConfig
 from fractal_zero.data.data_handler import DataHandler
-from fractal_zero.fmc import FMC
 from fractal_zero.fractal_zero import FractalZero
 
 from fractal_zero.models.dynamics import FullyConnectedDynamicsModel
