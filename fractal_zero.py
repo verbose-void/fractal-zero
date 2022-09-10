@@ -30,9 +30,11 @@ class FractalZero(torch.nn.Module):
 
         state = self.model.representation_model.forward(observation)
 
+        greedy_action = not self.training
+        
         if lookahead_steps > 0:
             self.fmc.set_state(state)
-            action = self.fmc.simulate(lookahead_steps)
+            action = self.fmc.simulate(lookahead_steps, greedy_action=greedy_action)
             return action, self.fmc.root_value
 
         raise NotImplementedError("Action prediction not yet working.")

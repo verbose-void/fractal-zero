@@ -84,22 +84,27 @@ class FMC:
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
     @torch.no_grad()
-    def simulate(self, k: int):
+    def simulate(self, k: int, greedy_action: bool = True):
         """Run FMC for k iterations, returning the best action that was taken at the root/initial state."""
 
         self.k = k
         assert self.k > 0
 
         # TODO: explain all these variables
+        # NOTE: they should exist on the CPU.
         self.reward_buffer = torch.zeros(
-            size=(self.num_walkers, self.k, 1), dtype=float, device=self.device
+            size=(self.num_walkers, self.k, 1), dtype=float,
         )
         self.value_sum_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=float, device=self.device
+            size=(self.num_walkers, 1), dtype=float,
         )
         self.visit_buffer = torch.zeros(
-            size=(self.num_walkers, 1), dtype=int, device=self.device
+            size=(self.num_walkers, 1), dtype=int,
         )
+        self.clone_receives = torch.zeros(
+            size=(self.num_walkers, 1), dtype=int,
+        )
+
         self.root_actions = None
         self.root_value_sum = 0
         self.root_visits = 0
@@ -130,11 +135,15 @@ class FMC:
                         "fmc/average_value_buffer",
                         self.value_sum_buffer / self.visit_buffer.float(),
                     ),
+                    **mean_min_max_dict("fmc/clone_receives", self.clone_receives.float()),
                 },
                 commit=False,
             )
 
-        return self._get_highest_value_action()
+        # TODO: experiment with these
+        if greedy_action:
+            return self._get_highest_value_action()
+        return self._get_action_with_highest_clone_receives()
 
     @torch.no_grad()
     def _assign_actions(self):
@@ -155,7 +164,7 @@ class FMC:
         """For the cloning phase, walkers need a partner to determine if they should be sent as reinforcements to their partner's state."""
 
         choices = np.random.choice(np.arange(self.num_walkers), size=self.num_walkers)
-        self.clone_partners = torch.tensor(choices, dtype=int, device=self.device)
+        self.clone_partners = torch.tensor(choices, dtype=int)
 
     @torch.no_grad()
     def _calculate_distances(self):
@@ -202,7 +211,7 @@ class FMC:
 
         self.clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
         r = np.random.uniform()
-        self.clone_mask = self.clone_probabilities >= r
+        self.clone_mask = (self.clone_probabilities >= r).cpu()
 
         if self.use_wandb:
             wandb.log(
@@ -243,6 +252,10 @@ class FMC:
             print("clone mask", self.clone_mask)
             print("state before", self.state)
 
+        # keep track of which walkers received clones and how many.
+        clones_received_per_walker = torch.bincount(self.clone_partners[self.clone_mask]).unsqueeze(-1)
+        self.clone_receives[:len(clones_received_per_walker)] += clones_received_per_walker
+
         # execute clones
         self._clone_vector(self.state)
         self._clone_vector(self.actions)
@@ -250,6 +263,7 @@ class FMC:
         self._clone_vector(self.reward_buffer)
         self._clone_vector(self.value_sum_buffer)
         self._clone_vector(self.visit_buffer)
+        self._clone_vector(self.clone_receives)  # yes... clone clone receives lol.
 
         if self.verbose:
             print("state after", self.state)
@@ -298,6 +312,12 @@ class FMC:
         )
 
         return highest_value_action
+
+    @torch.no_grad()
+    def _get_action_with_highest_clone_receives(self):
+        # TODO: docstring
+        most_cloned_to_walker = torch.argmax(self.clone_receives)
+        return self.root_actions[most_cloned_to_walker, 0].cpu().numpy()
 
     def render_best_walker_path(self):
         edges = [

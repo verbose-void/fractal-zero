@@ -19,8 +19,8 @@ from tqdm import tqdm
 
 
 if __name__ == "__main__":
-    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    device = torch.device("cpu")
+    device = torch.device("cuda")# if torch.cuda.is_available() else torch.device("cpu")
+    # device = torch.device("cpu")
 
     env = gym.make("CartPole-v0")
 
@@ -28,12 +28,12 @@ if __name__ == "__main__":
     embedding_size = 16
     out_features = 1
 
-    num_games = 10_000
+    num_games = 5_000
     train_every = 1
-    train_batches = 1
+    train_batches = 2
     evaluate_every = 16
-    batch_size = 128  # NOTE: if the replay buffer isn't larger than the batch size, you will get many duplicate samples
-    learning_rate = 0.02
+    max_batch_size = 128
+    learning_rate = 0.001
 
     max_steps = 200
     num_walkers = 64
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     )
 
     replay_buffer = ReplayBuffer(max_replay_buffer_size)
-    data_handler = DataHandler(env, replay_buffer, device=device, batch_size=batch_size)
+    data_handler = DataHandler(env, replay_buffer, device=device, max_batch_size=max_batch_size)
 
     fractal_zero = FractalZero(env, joint_model, balance=balance)
     trainer = FractalZeroTrainer(
@@ -67,6 +67,7 @@ if __name__ == "__main__":
     )
 
     for i in tqdm(range(num_games), desc="Playing games and training", total=num_games):
+        fractal_zero.train()
         game_history = fractal_zero.play_game(
             max_steps, num_walkers, lookahead_steps, use_wandb_for_fmc=use_wandb
         )
@@ -77,9 +78,8 @@ if __name__ == "__main__":
                 trainer.train_step()
 
         if i % evaluate_every == 0:
-            fractal_zero.eval()
-
             # TODO: move into trainer?
+            fractal_zero.eval()
             game_history = fractal_zero.play_game(
                 max_steps, num_walkers, evaluation_lookahead_steps, render=False
             )

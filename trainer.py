@@ -23,10 +23,10 @@ class FractalZeroTrainer:
 
         # TODO: load from config
         self.learning_rate = learning_rate
-        # self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
-        self.optimizer = torch.optim.Adam(
-            self.fractal_zero.parameters(), lr=self.learning_rate
-        )
+        self.optimizer = torch.optim.SGD(self.fractal_zero.parameters(), lr=self.learning_rate)
+        # self.optimizer = torch.optim.Adam(
+            # self.fractal_zero.parameters(), lr=self.learning_rate
+        # )
         self.unroll_steps = unroll_steps
 
         self.use_wandb = use_wandb
@@ -109,6 +109,7 @@ class FractalZeroTrainer:
                     ),
                     **mean_min_max_dict("data/target_values", self.target_values),
                     "data/replay_buffer_size": len(self.data_handler.replay_buffer),
+                    "data/batch_size": len(self.target_auxiliaries),
                 }
             )
 
