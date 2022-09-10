@@ -2,22 +2,16 @@ from typing import Tuple
 import gym
 import torch
 import numpy as np
+from fractal_zero.config import FractalZeroConfig
 from fractal_zero.data.replay_buffer import ReplayBuffer
 from fractal_zero.utils import get_space_shape
 
 
 class DataHandler:
-    def __init__(
-        self, env: gym.Env, replay_buffer: ReplayBuffer, device, max_batch_size: int = 8
-    ):
-        self.replay_buffer = replay_buffer
-        self.device = device
+    def __init__(self, config: FractalZeroConfig):
+        self.config = config
 
-        # TODO: config
-        self.max_batch_size = max_batch_size
-
-        self.observation_shape = get_space_shape(env.observation_space)
-        self.action_shape = get_space_shape(env.action_space)
+        self.replay_buffer = ReplayBuffer(self.config)
 
         # TODO: expert dataset
 
@@ -28,13 +22,13 @@ class DataHandler:
 
         assert num_frames > 0
 
-        batch_size = min(len(self.replay_buffer), self.max_batch_size)
+        batch_size = min(len(self.replay_buffer), self.config.max_batch_size)
 
         observations = np.zeros(
-            (batch_size, num_frames, *self.observation_shape), dtype=float
+            (batch_size, num_frames, *self.config.observation_shape), dtype=float
         )
         actions = np.zeros(
-            (batch_size, num_frames, *self.action_shape), dtype=float
+            (batch_size, num_frames, *self.config.action_shape), dtype=float
         )
         auxiliaries = np.zeros(
             (
@@ -68,8 +62,8 @@ class DataHandler:
 
         # TODO: put these on the correct device sooner?
         return (
-            torch.tensor(observations, device=self.device).float(),
-            torch.tensor(actions, device=self.device).float(),
-            torch.tensor(auxiliaries, device=self.device).unsqueeze(-1).float(),
-            torch.tensor(values, device=self.device).unsqueeze(-1).float(),
+            torch.tensor(observations, device=self.config.device).float(),
+            torch.tensor(actions, device=self.config.device).float(),
+            torch.tensor(auxiliaries, device=self.config.device).unsqueeze(-1).float(),
+            torch.tensor(values, device=self.config.device).unsqueeze(-1).float(),
         )
