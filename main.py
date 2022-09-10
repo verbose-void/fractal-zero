@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from this import d
 from time import sleep
 import gym
@@ -50,7 +51,7 @@ if __name__ == "__main__":
         balance=1.0,
         lookahead_steps=64,
         evaluation_lookahead_steps=64,
-        # wandb_config={"project": "fractal_zero_cartpole"},
+        wandb_config={"project": "fractal_zero_cartpole"},
     )
 
     # TODO: make this logic automatic in config somehow?

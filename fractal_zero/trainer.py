@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import torch
 
 import wandb
@@ -27,7 +28,9 @@ class FractalZeroTrainer:
             )
 
         if self.config.use_wandb:
-            wandb.init(project="fractal_zero_cartpole")
+            if "config" in self.config.wandb_config:
+                raise KeyError("The config field in `wandb_config` will be automatically set using the FractalZeroConfig.")
+            wandb.init(**self.config.wandb_config, config=self.config.asdict())
 
     @property
     def representation_model(self):

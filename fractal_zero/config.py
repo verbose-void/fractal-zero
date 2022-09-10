@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 import gym
 import torch
@@ -45,3 +45,11 @@ class FractalZeroConfig:
     @property
     def action_shape(self) -> tuple:
         return get_space_shape(self.env.action_space)
+
+    def asdict(self) -> dict:
+        d = asdict(self)
+
+        del d["env"]
+        d["env"] = self.env.unwrapped.spec.id
+
+        return d
