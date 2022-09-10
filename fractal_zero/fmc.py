@@ -117,9 +117,6 @@ class FMC:
             self._backpropagate_reward_buffer()
             self._execute_cloning()
 
-            # nx.draw(self.game_tree)
-            # plt.show()
-
         # sanity check
         assert self.state.shape == (
             self.num_walkers,
@@ -327,20 +324,6 @@ class FMC:
         # TODO: docstring
         most_cloned_to_walker = torch.argmax(self.clone_receives)
         return self.root_actions[most_cloned_to_walker, 0].cpu().numpy()
-
-    def render_best_walker_path(self):
-        edges = [
-            (self.best_path[i], self.best_path[i + 1])
-            for i in range(len(self.best_path) - 1)
-        ]
-        color_map = [
-            "green" if node == self.root else "black" for node in self.game_tree
-        ]
-        edge_color = [
-            "red" if edge in edges else "black" for edge in self.game_tree.edges
-        ]
-        nx.draw(self.game_tree, node_color=color_map, edge_color=edge_color)
-        plt.show()
 
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
