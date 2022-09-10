@@ -44,8 +44,6 @@ class FractalZero(torch.nn.Module):
         self,
         render: bool = False,
     ):
-        # TODO: create config class
-
         env = self.config.env
 
         obs = env.reset()
