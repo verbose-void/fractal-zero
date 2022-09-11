@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Callable
 
 import gym
@@ -39,7 +39,7 @@ class FractalZeroConfig:
     unroll_steps: int = 16
     minimize_batch_padding: bool = True
     learning_rate: float = 0.001
-    lr_scheduler_config: dict = CONSTANT_LR_CONFIG
+    lr_scheduler_config: dict = field(default_factory=lambda: CONSTANT_LR_CONFIG)
     weight_decay: float = 1e-4
     momentum: float = 0.9  # only if optimizer is SGD
     optimizer: str = "SGD"
