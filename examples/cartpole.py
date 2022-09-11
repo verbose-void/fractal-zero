@@ -13,6 +13,8 @@ from fractal_zero.trainer import FractalZeroTrainer
 import wandb
 from tqdm import tqdm
 
+from fractal_zero.utils import mean_min_max_dict
+
 
 def get_cartpole_joint_model(env: gym.Env) -> JointModel:
     embedding_size = 16
@@ -57,7 +59,7 @@ def train_cartpole():
     train_every = 1
     train_batches = 2
     evaluate_every = 16
-    checkpoint_every = evaluate_every
+    eval_steps = 16
 
     # TODO: make this logic automatic in config somehow?
     config.joint_model = config.joint_model.to(config.device)
@@ -84,21 +86,27 @@ def train_cartpole():
 
         if i % evaluate_every == 0:
             # TODO: move into trainer?
+            
             fractal_zero.eval()
-            game_history = fractal_zero.play_game()
+
+            game_lengths = []
+            cumulative_rewards = []
+            for _ in range(eval_steps):
+                game_history = fractal_zero.play_game()
+                game_lengths.append(len(game_history))
+                cumulative_reward = sum(game_history.environment_reward_signals)
+                cumulative_rewards.append(cumulative_reward)
 
             if config.use_wandb:
                 wandb.log(
                     {
-                        "evaluation/episode_length": len(game_history),
-                        "evaluation/cumulative_reward": sum(
-                            game_history.environment_reward_signals
-                        ),
+                        **mean_min_max_dict("evaluation/episode_length", game_lengths),
+                        **mean_min_max_dict("evaluation/cumulative_reward", cumulative_rewards),
                     },
                     commit=False,
                 )
 
-        if i % checkpoint_every == 0:
+            # checkpoint after each evaluation
             trainer.save_checkpoint()
 
 
