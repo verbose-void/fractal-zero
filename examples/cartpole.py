@@ -86,7 +86,7 @@ def train_cartpole():
 
         if i % evaluate_every == 0:
             # TODO: move into trainer?
-            
+
             fractal_zero.eval()
 
             game_lengths = []
@@ -101,7 +101,9 @@ def train_cartpole():
                 wandb.log(
                     {
                         **mean_min_max_dict("evaluation/episode_length", game_lengths),
-                        **mean_min_max_dict("evaluation/cumulative_reward", cumulative_rewards),
+                        **mean_min_max_dict(
+                            "evaluation/cumulative_reward", cumulative_rewards
+                        ),
                     },
                     commit=False,
                 )

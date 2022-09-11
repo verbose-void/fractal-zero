@@ -67,7 +67,9 @@ class ReplayBuffer:
             elif strat == "random":
                 i = np.random.randint(0, len(self))
             else:
-                raise NotImplementedError(f"Replay buffer pop strategy \"{strat}\" is not supported.")
+                raise NotImplementedError(
+                    f'Replay buffer pop strategy "{strat}" is not supported.'
+                )
 
             self.game_histories.pop(i)
 

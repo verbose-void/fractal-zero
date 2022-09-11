@@ -44,7 +44,7 @@ class FractalZeroTrainer:
                 weight_decay=self.config.weight_decay,
             )
         else:
-            raise NotImplementedError(f"Optimizer \"{op}\" not yet supported.")
+            raise NotImplementedError(f'Optimizer "{op}" not yet supported.')
 
     def _setup_lr_schedule(self):
         lr_config = self.config.lr_scheduler_config
@@ -134,18 +134,18 @@ class FractalZeroTrainer:
                 "losses/auxiliary": auxiliary_loss.item(),
                 "losses/value": value_loss.item(),
                 "losses/composite": composite_loss.item(),
-                **mean_min_max_dict(
-                    "data/auxiliary_targets", self.target_auxiliaries
-                ),
+                **mean_min_max_dict("data/auxiliary_targets", self.target_auxiliaries),
                 **mean_min_max_dict("data/target_values", self.target_values),
                 "data/replay_buffer_size": len(self.data_handler.replay_buffer),
                 **mean_min_max_dict(
                     "data/replay_buffer_episode_lengths",
-                    self.data_handler.replay_buffer.get_episode_lengths()
+                    self.data_handler.replay_buffer.get_episode_lengths(),
                 ),
                 "data/batch_size": len(self.target_auxiliaries),
                 "data/empty_frames_in_batch": self.num_empty_frames,
-                **mean_min_max_dict("lr/learning_rates", self.lr_scheduler.get_last_lr()),
+                **mean_min_max_dict(
+                    "lr/learning_rates", self.lr_scheduler.get_last_lr()
+                ),
             }
         )
 

@@ -21,6 +21,7 @@ CONSTANT_LR_CONFIG = {
     "gamma": 1,
 }
 
+
 @dataclass
 class FractalZeroConfig:
     # TODO: break config into multiple parts (FMC, Trainer, etc.)
