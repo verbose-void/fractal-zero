@@ -8,7 +8,7 @@ if __name__ == "__main__":
     # TODO: arg parser
     parser = ArgumentParser("play_checkpoint")
     parser.add_argument("checkpoint_path", type=str)
-    
+
     args = parser.parse_args()
 
     trainer = torch.load(args.checkpoint_path)

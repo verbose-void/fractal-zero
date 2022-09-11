@@ -106,7 +106,7 @@ class ReplayBuffer:
         actions[:actual_num_frames] = actual_frames[1]
         rewards[:actual_num_frames] = actual_frames[2]
         values[:actual_num_frames] = actual_frames[3]
-        
+
         num_empty_frames = clip_length - actual_num_frames
 
         return observations, actions, rewards, values, num_empty_frames

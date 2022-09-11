@@ -40,7 +40,7 @@ def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
         learning_rate=0.003,
         optimizer="SGD",
         weight_decay=1e-4,
-        momentum=0.9,   # only if optimizer is SGD
+        momentum=0.9,  # only if optimizer is SGD
         num_walkers=64,
         balance=1.0,
         lookahead_steps=64,

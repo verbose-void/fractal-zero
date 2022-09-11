@@ -134,9 +134,7 @@ class FMC:
                     "fmc/average_value_buffer",
                     self.value_sum_buffer / self.visit_buffer.float(),
                 ),
-                **mean_min_max_dict(
-                    "fmc/clone_receives", self.clone_receives.float()
-                ),
+                **mean_min_max_dict("fmc/clone_receives", self.clone_receives.float()),
             },
             commit=False,
         )
@@ -295,7 +293,7 @@ class FMC:
         elif strat == "clone_participants":
             mask = torch.logical_or(self.clone_mask, self.clone_receive_mask)
         else:
-            raise ValueError(f"FMC Backprop strategy \"{strat}\" is not supported.")
+            raise ValueError(f'FMC Backprop strategy "{strat}" is not supported.')
 
         return mask
 

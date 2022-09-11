@@ -30,7 +30,7 @@ class FractalZero(torch.nn.Module):
         else:
             greedy_action = True
             k = self.config.evaluation_lookahead_steps
-            
+
         _, value_estimate = self.model.prediction_model.forward(state)
 
         if self.config.lookahead_steps > 0:
@@ -62,7 +62,9 @@ class FractalZero(torch.nn.Module):
                 print()
                 print(f"step={step}")
                 print(f"reward={reward}, done={done}, info={info}")
-                print(f"action={action}, root_value={root_value}, value_estimate={value_estimate}")
+                print(
+                    f"action={action}, root_value={root_value}, value_estimate={value_estimate}"
+                )
                 env.render()
                 sleep(0.1)
 
