@@ -13,9 +13,13 @@ DEFAULT_DEVICE = (
     torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 )
 
-def _get_constant_lr_scheduler(optimizer):
-    return StepLR(optimizer, step_size=999999, gamma=1)
 
+CONSTANT_LR_CONFIG = {
+    "alias": "ConstantLR",
+    "class": StepLR,
+    "step_size": 999999,
+    "gamma": 1,
+}
 
 @dataclass
 class FractalZeroConfig:
@@ -35,7 +39,7 @@ class FractalZeroConfig:
     unroll_steps: int = 16
     minimize_batch_padding: bool = True
     learning_rate: float = 0.001
-    lr_scheduler_factory: Callable = _get_constant_lr_scheduler
+    lr_scheduler_config: dict = CONSTANT_LR_CONFIG
     weight_decay: float = 1e-4
     momentum: float = 0.9  # only if optimizer is SGD
     optimizer: str = "SGD"

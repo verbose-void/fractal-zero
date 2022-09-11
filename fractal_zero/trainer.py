@@ -47,7 +47,10 @@ class FractalZeroTrainer:
             raise NotImplementedError(f"Optimizer \"{op}\" not yet supported.")
 
     def _setup_lr_schedule(self):
-        self.lr_scheduler = self.config.lr_scheduler_factory(self.optimizer)
+        lr_config = self.config.lr_scheduler_config
+        lr_config.pop("alias")
+        scheduler_class = lr_config.pop("class")
+        self.lr_scheduler = scheduler_class(self.optimizer, **lr_config)
 
     def _setup_logger(self):
         if self.config.use_wandb:
