@@ -62,7 +62,7 @@ class ReplayBuffer:
         if len(self) >= self.config.max_replay_buffer_size:
             strat = self.config.replay_buffer_pop_strategy
 
-            if strat == "first":
+            if strat == "oldest":
                 i = 0
             elif strat == "random":
                 i = np.random.randint(0, len(self))
