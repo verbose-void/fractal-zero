@@ -22,7 +22,12 @@ class DataHandler:
 
         assert num_frames > 0
 
-        batch_size = min(len(self.replay_buffer), self.config.max_batch_size)
+        if self.config.dynamic_batch_size:
+            # if using dynamic batch size, the batch size will never be greater than the number of
+            # game histories in the replay buffer.
+            batch_size = min(len(self.replay_buffer), self.config.max_batch_size)
+        else:
+            batch_size = self.config.max_batch_size
 
         observations = np.zeros(
             (batch_size, num_frames, *self.config.observation_shape), dtype=float

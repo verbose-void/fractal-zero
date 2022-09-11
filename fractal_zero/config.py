@@ -22,6 +22,7 @@ class FractalZeroConfig:
     max_game_steps: int = 200
 
     max_batch_size: int = 128
+    dynamic_batch_size: bool = False
     gamma: float = 0.99
     unroll_steps: int = 16
     learning_rate: float = 0.001
