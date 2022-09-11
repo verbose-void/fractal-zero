@@ -14,25 +14,22 @@ import wandb
 from tqdm import tqdm
 
 
-if __name__ == "__main__":
-    env = gym.make("CartPole-v0")
-
+def get_cartpole_joint_model(env: gym.Env) -> JointModel:
     embedding_size = 16
     out_features = 1
-
-    train_every = 1
-    train_batches = 2
-    evaluate_every = 16
-    checkpoint_every = 128
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
     dynamics_model = FullyConnectedDynamicsModel(
         env, embedding_size, out_features=out_features
     )
     prediction_model = FullyConnectedPredictionModel(env, embedding_size)
-    joint_model = JointModel(representation_model, dynamics_model, prediction_model)
+    return JointModel(representation_model, dynamics_model, prediction_model)
 
-    config = FractalZeroConfig(
+
+def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
+    joint_model = get_cartpole_joint_model(env)
+
+    return FractalZeroConfig(
         env,
         joint_model,
         max_replay_buffer_size=512,
@@ -40,7 +37,7 @@ if __name__ == "__main__":
         max_game_steps=200,
         max_batch_size=128,
         unroll_steps=16,
-        learning_rate=0.001,
+        learning_rate=0.002,
         optimizer="SGD",
         num_walkers=64,
         balance=1.0,
@@ -49,13 +46,22 @@ if __name__ == "__main__":
         wandb_config={"project": "fractal_zero_cartpole"},
     )
 
+
+def train_cartpole():
+    env = gym.make("CartPole-v0")
+    config = get_cartpole_config(env)
+
+    # TODO: move into config?
+    train_every = 1
+    train_batches = 2
+    evaluate_every = 16
+    checkpoint_every = 128
+
     # TODO: make this logic automatic in config somehow?
     config.joint_model = config.joint_model.to(config.device)
 
     data_handler = DataHandler(config)
-
     fractal_zero = FractalZero(config)
-
     trainer = FractalZeroTrainer(
         fractal_zero,
         data_handler,
@@ -92,3 +98,7 @@ if __name__ == "__main__":
 
         if i % checkpoint_every == 0:
             trainer.save_checkpoint()
+
+
+if __name__ == "__main__":
+    train_cartpole()
