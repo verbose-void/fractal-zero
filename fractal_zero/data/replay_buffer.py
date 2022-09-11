@@ -54,27 +54,33 @@ class ReplayBuffer:
 
         self.game_histories = []
 
+    def _maybe_pop_one(self):
+        # TODO: docstring
+
+        if len(self) < self.config.max_replay_buffer_size:
+            return
+
+        strat = self.config.replay_buffer_pop_strategy
+
+        if strat == "oldest":
+            i = 0
+        elif strat == "random":
+            i = np.random.randint(0, len(self))
+        elif strat == "virtual_reward":
+            raise NotImplementedError
+        else:
+            raise NotImplementedError(
+                f'Replay buffer pop strategy "{strat}" is not supported.'
+            )
+
+        self.game_histories.pop(i)
+
     def append(self, game_history: GameHistory):
         """Add a trajectory/episode to the replay buffer. If the buffer is full, a trajectory will be popped according
         to the pop strategy specified in the config.
         """
 
-        if len(self) >= self.config.max_replay_buffer_size:
-            strat = self.config.replay_buffer_pop_strategy
-
-            if strat == "oldest":
-                i = 0
-            elif strat == "random":
-                i = np.random.randint(0, len(self))
-            elif strat == "virtual_reward":
-                raise NotImplementedError
-            else:
-                raise NotImplementedError(
-                    f'Replay buffer pop strategy "{strat}" is not supported.'
-                )
-
-            self.game_histories.pop(i)
-
+        self._maybe_pop_one()
         self.game_histories.append(game_history)
 
         if len(self) > self.config.max_replay_buffer_size:
