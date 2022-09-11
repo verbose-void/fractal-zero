@@ -24,6 +24,7 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
             torch.nn.Linear(self.embedding_size, self.embedding_size),
             torch.nn.ReLU(),
             torch.nn.Linear(self.embedding_size, self.embedding_size),
+            torch.nn.ReLU(),
         )
 
         # TODO: explain why it's called auxiliary (hint: it's more general than reward head)
