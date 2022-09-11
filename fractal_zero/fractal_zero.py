@@ -22,7 +22,10 @@ class FractalZero(torch.nn.Module):
     def forward(self, observation):
         # TODO: docstring, note that lookahead_steps == 0 means there won't be a tree search
 
-        state = self.model.representation_model.forward(observation)
+        if observation.shape != self.config.observation_shape:
+            raise ValueError(f"The observation shape provided was unexpected. Got {observation.shape}, expected {self.config.observation_shape}. Note: batched observations are not yet supported.")
+
+        self.state = self.model.representation_model.forward(observation)
 
         if self.training:
             greedy_action = False
@@ -31,10 +34,10 @@ class FractalZero(torch.nn.Module):
             greedy_action = True
             k = self.config.evaluation_lookahead_steps
 
-        _, value_estimate = self.model.prediction_model.forward(state)
+        _, value_estimate = self.model.prediction_model.forward(self.state)
 
         if self.config.lookahead_steps > 0:
-            self.fmc.set_state(state)
+            self.fmc.set_state(self.state)
             action = self.fmc.simulate(k, greedy_action=greedy_action)
             return action, self.fmc.root_value, value_estimate.item()
 
@@ -47,7 +50,7 @@ class FractalZero(torch.nn.Module):
         env = self.config.env
 
         obs = env.reset()
-        game_history = GameHistory(obs)
+        game_history = GameHistory()
 
         self.fmc = FMC(self.config, verbose=False)
 

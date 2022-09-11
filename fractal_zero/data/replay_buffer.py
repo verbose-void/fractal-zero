@@ -4,12 +4,12 @@ from fractal_zero.config import FractalZeroConfig
 
 
 class GameHistory:
-    def __init__(self, initial_observation):
+    def __init__(self):
         # first "frame" is always empty (with the actual initial observation)
-        self.actions = [0]  # TODO: use the action shape
-        self.observations = [initial_observation]
-        self.environment_reward_signals = [0]
-        self.values = [0]
+        self.actions = []
+        self.observations = []
+        self.environment_reward_signals = []
+        self.values = []
 
     @property
     def observation_shape(self):
@@ -43,7 +43,7 @@ class GameHistory:
         raise ValueError(str(self))
 
     def __str__(self):
-        return f"GameHistory(num_actions={len(self.actions)}, num_observation={len(self.observations)}, num_rewards={len(self.environment_reward_signals)})"
+        return f"GameHistory(frames={len(self)})"
 
 
 class ReplayBuffer:
@@ -66,6 +66,8 @@ class ReplayBuffer:
                 i = 0
             elif strat == "random":
                 i = np.random.randint(0, len(self))
+            elif strat == "virtual_reward":
+                raise NotImplementedError
             else:
                 raise NotImplementedError(
                     f'Replay buffer pop strategy "{strat}" is not supported.'
