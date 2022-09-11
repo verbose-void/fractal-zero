@@ -1,7 +1,9 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from typing import Callable
 
 import gym
 import torch
+from torch.optim.lr_scheduler import StepLR
 from fractal_zero.models.joint_model import JointModel
 
 from fractal_zero.utils import get_space_shape
@@ -12,6 +14,14 @@ DEFAULT_DEVICE = (
 )
 
 
+CONSTANT_LR_CONFIG = {
+    "alias": "ConstantLR",
+    "class": StepLR,
+    "step_size": 999999,
+    "gamma": 1,
+}
+
+
 @dataclass
 class FractalZeroConfig:
     # TODO: break config into multiple parts (FMC, Trainer, etc.)
@@ -20,6 +30,7 @@ class FractalZeroConfig:
     joint_model: JointModel
 
     max_replay_buffer_size: int = 512
+    replay_buffer_pop_strategy: str = "oldest"  # oldest or random
     num_games: int = 5_000
     max_game_steps: int = 200
 
@@ -29,6 +40,7 @@ class FractalZeroConfig:
     unroll_steps: int = 16
     minimize_batch_padding: bool = True
     learning_rate: float = 0.001
+    lr_scheduler_config: dict = field(default_factory=lambda: CONSTANT_LR_CONFIG)
     weight_decay: float = 1e-4
     momentum: float = 0.9  # only if optimizer is SGD
     optimizer: str = "SGD"

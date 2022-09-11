@@ -10,31 +10,49 @@ from fractal_zero.utils import mean_min_max_dict
 
 
 class FractalZeroTrainer:
+    lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None
+
     def __init__(
         self,
         fractal_zero: FractalZero,
         data_handler: DataHandler,
     ):
         self.config = fractal_zero.config
-
         self.data_handler = data_handler
-
         self.fractal_zero = fractal_zero
 
-        if self.config.optimizer.lower() == "sgd":
+        self._setup_optimizer()
+        self._setup_lr_schedule()
+        self._setup_logger()
+
+        self.completed_train_steps = 0
+
+    def _setup_optimizer(self):
+        op = self.config.optimizer.lower()
+
+        if op == "sgd":
             self.optimizer = torch.optim.SGD(
                 self.fractal_zero.parameters(),
                 lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay,
                 momentum=self.config.momentum,
             )
-        elif self.config.optimizer.lower() == "adam":
+        elif op == "adam":
             self.optimizer = torch.optim.Adam(
                 self.fractal_zero.parameters(),
                 lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay,
             )
+        else:
+            raise NotImplementedError(f'Optimizer "{op}" not yet supported.')
 
+    def _setup_lr_schedule(self):
+        lr_config = self.config.lr_scheduler_config
+        lr_config.pop("alias")
+        scheduler_class = lr_config.pop("class")
+        self.lr_scheduler = scheduler_class(self.optimizer, **lr_config)
+
+    def _setup_logger(self):
         if self.config.use_wandb:
             if "config" in self.config.wandb_config:
                 raise KeyError(
@@ -44,8 +62,6 @@ class FractalZeroTrainer:
             self.run_name = wandb.run.name
         else:
             self.run_name = datetime.now().strftime("%Y-%m-%d_%I-%M-%S_%p")
-
-        self.completed_train_steps = 0
 
     @property
     def representation_model(self):
@@ -113,25 +129,25 @@ class FractalZeroTrainer:
 
         composite_loss = auxiliary_loss + value_loss
 
-        if self.config.use_wandb:
-            wandb.log(
-                {
-                    "losses/auxiliary": auxiliary_loss.item(),
-                    "losses/value": value_loss.item(),
-                    "losses/composite": composite_loss.item(),
-                    **mean_min_max_dict(
-                        "data/auxiliary_targets", self.target_auxiliaries
-                    ),
-                    **mean_min_max_dict("data/target_values", self.target_values),
-                    "data/replay_buffer_size": len(self.data_handler.replay_buffer),
-                    **mean_min_max_dict(
-                        "data/replay_buffer_episode_lengths",
-                        self.data_handler.replay_buffer.get_episode_lengths(),
-                    ),
-                    "data/batch_size": len(self.target_auxiliaries),
-                    "data/empty_frames_in_batch": self.num_empty_frames,
-                }
-            )
+        self.log(
+            {
+                "losses/auxiliary": auxiliary_loss.item(),
+                "losses/value": value_loss.item(),
+                "losses/composite": composite_loss.item(),
+                **mean_min_max_dict("data/auxiliary_targets", self.target_auxiliaries),
+                **mean_min_max_dict("data/target_values", self.target_values),
+                "data/replay_buffer_size": len(self.data_handler.replay_buffer),
+                **mean_min_max_dict(
+                    "data/replay_buffer_episode_lengths",
+                    self.data_handler.replay_buffer.get_episode_lengths(),
+                ),
+                "data/batch_size": len(self.target_auxiliaries),
+                "data/empty_frames_in_batch": self.num_empty_frames,
+                **mean_min_max_dict(
+                    "lr/learning_rates", self.lr_scheduler.get_last_lr()
+                ),
+            }
+        )
 
         return composite_loss
 
@@ -147,6 +163,7 @@ class FractalZeroTrainer:
         composite_loss.backward()
 
         self.optimizer.step()
+        self.lr_scheduler.step()
 
         self.completed_train_steps += 1
 
@@ -161,3 +178,7 @@ class FractalZeroTrainer:
         path = os.path.join(folder, self.checkpoint_filename)
         torch.save(self, path)
         return path
+
+    def log(self, *args, **kwargs):
+        if self.config.use_wandb:
+            wandb.log(*args, **kwargs)

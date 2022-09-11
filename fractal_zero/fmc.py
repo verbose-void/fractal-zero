@@ -184,8 +184,10 @@ class FMC:
         ranges were too high, it's likely no cloning would occur at all. If either were too small, then it's likely all walkers would be cloned.
         """
 
-        rel_values = _relativize_vector(self.predicted_values).squeeze(-1)
-        rel_distances = _relativize_vector(self.distances)
+        # TODO EXPERIMENT: should we be using the value estimates? or should we be using the value buffer?
+        # or should we be using the cumulative rewards? (the original FMC authors use cumulative rewards)
+        rel_values = _relativize_vector(self.predicted_values).squeeze(-1).cpu()
+        rel_distances = _relativize_vector(self.distances).cpu()
         self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
 
         self.log(
