@@ -13,6 +13,6 @@ if __name__ == "__main__":
 
     trainer = torch.load(args.checkpoint_path)
     fractal_zero: FractalZero = trainer.fractal_zero
-    
+
     fractal_zero.eval()
     fractal_zero.play_game(render=True)
