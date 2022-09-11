@@ -75,7 +75,15 @@ class ReplayBuffer:
 
         game = self.sample_game()
 
-        start_frame = np.random.randint(0, len(game))
+        # minimizing padding means the start frame chosen will result in the least amount of padded frames.
+        if self.config.minimize_batch_padding:
+            if len(game) <= clip_length:
+                start_frame = 0
+            else:
+                start_frame = np.random.randint(0, len(game) - clip_length)
+        else:
+            start_frame = np.random.randint(0, len(game))
+
         end_frame = start_frame + clip_length
 
         actual_frames = game[start_frame:end_frame]
@@ -98,8 +106,10 @@ class ReplayBuffer:
         actions[:actual_num_frames] = actual_frames[1]
         rewards[:actual_num_frames] = actual_frames[2]
         values[:actual_num_frames] = actual_frames[3]
+        
+        num_empty_frames = clip_length - actual_num_frames
 
-        return observations, actions, rewards, values
+        return observations, actions, rewards, values, num_empty_frames
 
     def get_episode_lengths(self):
         return [len(history) for history in self.game_histories]

@@ -62,6 +62,7 @@ class FractalZeroTrainer:
             self.actions,
             self.target_auxiliaries,
             self.target_values,
+            self.num_empty_frames,
         ) = batch
 
         return batch
@@ -123,6 +124,7 @@ class FractalZeroTrainer:
                         self.data_handler.replay_buffer.get_episode_lengths(),
                     ),
                     "data/batch_size": len(self.target_auxiliaries),
+                    "data/empty_frames_in_batch": self.num_empty_frames,
                 }
             )
 

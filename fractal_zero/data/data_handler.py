@@ -50,12 +50,14 @@ class DataHandler:
             dtype=float,
         )
 
+        total_empty_frames = 0
         for i in range(batch_size):
             (
                 gobservations,
                 gactions,
                 grewards,
                 gvalues,
+                num_empty_frames,
             ) = self.replay_buffer.sample_game_clip(num_frames, pad_to_num_frames=True)
 
             observations[i, :] = gobservations
@@ -65,10 +67,13 @@ class DataHandler:
             auxiliaries[i] = grewards  # auxiliary is a generalization of reward.
             values[i] = gvalues
 
+            total_empty_frames += num_empty_frames
+
         # TODO: put these on the correct device sooner?
         return (
             torch.tensor(observations, device=self.config.device).float(),
             torch.tensor(actions, device=self.config.device).float(),
             torch.tensor(auxiliaries, device=self.config.device).unsqueeze(-1).float(),
             torch.tensor(values, device=self.config.device).unsqueeze(-1).float(),
+            total_empty_frames,
         )

@@ -25,6 +25,7 @@ class FractalZeroConfig:
     dynamic_batch_size: bool = False
     gamma: float = 0.99
     unroll_steps: int = 16
+    minimize_batch_padding: bool = True
     learning_rate: float = 0.001
     optimizer: str = "SGD"
 
