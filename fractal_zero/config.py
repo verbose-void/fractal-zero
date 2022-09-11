@@ -14,6 +14,8 @@ DEFAULT_DEVICE = (
 
 @dataclass
 class FractalZeroConfig:
+    # TODO: break config into multiple parts (FMC, Trainer, etc.)
+
     env: gym.Env
     joint_model: JointModel
 
@@ -35,6 +37,7 @@ class FractalZeroConfig:
     balance: float = 1
     lookahead_steps: int = 64
     evaluation_lookahead_steps: int = 64
+    fmc_backprop_strategy: str = "all"  # all, clone_mask, or clone_participants
 
     device: torch.device = DEFAULT_DEVICE
 

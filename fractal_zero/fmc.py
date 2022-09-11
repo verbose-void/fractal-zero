@@ -201,6 +201,20 @@ class FMC:
         )
 
     @torch.no_grad()
+    def _determine_clone_receives(self):
+        # keep track of which walkers received clones and how many.
+        clones_received_per_walker = torch.bincount(
+            self.clone_partners[self.clone_mask]
+        ).unsqueeze(-1)
+
+        n = len(clones_received_per_walker)
+
+        self.clone_receives[:n] += clones_received_per_walker
+
+        self.clone_receive_mask = torch.zeros_like(self.clone_mask)
+        self.clone_receive_mask[:n] = clones_received_per_walker.squeeze(-1) > 0
+
+    @torch.no_grad()
     def _determine_clone_mask(self):
         """The clone mask is based on the virtual rewards of each walker and their clone partner. If a walker is selected to clone, their
         state will be replaced with their partner's state.
@@ -212,6 +226,8 @@ class FMC:
         self.clone_probabilities = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
         r = np.random.uniform()
         self.clone_mask = (self.clone_probabilities >= r).cpu()
+
+        self._determine_clone_receives()
 
         self.log(
             {
@@ -251,14 +267,6 @@ class FMC:
             print("clone mask", self.clone_mask)
             print("state before", self.state)
 
-        # keep track of which walkers received clones and how many.
-        clones_received_per_walker = torch.bincount(
-            self.clone_partners[self.clone_mask]
-        ).unsqueeze(-1)
-        self.clone_receives[
-            : len(clones_received_per_walker)
-        ] += clones_received_per_walker
-
         # execute clones
         self._clone_vector(self.state)
         self._clone_vector(self.actions)
@@ -271,20 +279,33 @@ class FMC:
         if self.verbose:
             print("state after", self.state)
 
+    def _get_backprop_mask(self):
+        # TODO: docstring
+
+        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
+        # to backpropagate the value regardless of if they are cloning or not.
+        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
+        force_backpropagate_all = self.simulation_iteration == self.k - 1
+
+        strat = self.config.fmc_backprop_strategy
+        if strat == "all" or force_backpropagate_all:
+            mask = torch.ones_like(self.clone_mask)
+        elif strat == "clone_mask":
+            mask = self.clone_mask
+        elif strat == "clone_participants":
+            mask = torch.logical_or(self.clone_mask, self.clone_receive_mask)
+        else:
+            raise ValueError(f"FMC Backprop strategy \"{strat}\" is not supported.")
+
+        return mask
+
     def _backpropagate_reward_buffer(self):
         """This essentially does the backpropagate step that MCTS does, although instead of maintaining an entire tree, it maintains
         value sums and visit counts for each walker. These values may be subsequently cloned. There is some information loss
         during this clone, but it should be minimally impactful.
         """
 
-        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
-        # to backpropagate the value regardless of if they are cloning or not.
-        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
-        backpropagate_all = self.simulation_iteration == self.k - 1
-
-        mask = (
-            torch.ones_like(self.clone_mask) if backpropagate_all else self.clone_mask
-        )
+        mask = self._get_backprop_mask()
 
         current_value_buffer = torch.zeros_like(self.value_sum_buffer)
         for i in reversed(range(self.simulation_iteration)):
