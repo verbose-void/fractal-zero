@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.models.joint_model import JointModel
-from fractal_zero.utils import mean_min_max_dict, relativize_vector
+from fractal_zero.utils import calculate_virtual_rewards, mean_min_max_dict, relativize_vector
 
 
 class FMC:
@@ -175,9 +175,12 @@ class FMC:
 
         # TODO EXPERIMENT: should we be using the value estimates? or should we be using the value buffer?
         # or should we be using the cumulative rewards? (the original FMC authors use cumulative rewards)
-        rel_values = relativize_vector(self.predicted_values).squeeze(-1).cpu()
-        rel_distances = relativize_vector(self.distances).cpu()
-        self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
+        self.virtual_rewards = calculate_virtual_rewards(
+            self.predicted_values.squeeze(-1), 
+            self.distances,
+            balance=self.config.balance,
+            to_cpu=True,
+        )
 
         self.log(
             {
