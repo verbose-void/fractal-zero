@@ -22,7 +22,12 @@ class DataHandler:
 
         assert num_frames > 0
 
-        batch_size = min(len(self.replay_buffer), self.config.max_batch_size)
+        if self.config.dynamic_batch_size:
+            # if using dynamic batch size, the batch size will never be greater than the number of
+            # game histories in the replay buffer.
+            batch_size = min(len(self.replay_buffer), self.config.max_batch_size)
+        else:
+            batch_size = self.config.max_batch_size
 
         observations = np.zeros(
             (batch_size, num_frames, *self.config.observation_shape), dtype=float
@@ -45,12 +50,14 @@ class DataHandler:
             dtype=float,
         )
 
+        total_empty_frames = 0
         for i in range(batch_size):
             (
                 gobservations,
                 gactions,
                 grewards,
                 gvalues,
+                num_empty_frames,
             ) = self.replay_buffer.sample_game_clip(num_frames, pad_to_num_frames=True)
 
             observations[i, :] = gobservations
@@ -60,10 +67,13 @@ class DataHandler:
             auxiliaries[i] = grewards  # auxiliary is a generalization of reward.
             values[i] = gvalues
 
+            total_empty_frames += num_empty_frames
+
         # TODO: put these on the correct device sooner?
         return (
             torch.tensor(observations, device=self.config.device).float(),
             torch.tensor(actions, device=self.config.device).float(),
             torch.tensor(auxiliaries, device=self.config.device).unsqueeze(-1).float(),
             torch.tensor(values, device=self.config.device).unsqueeze(-1).float(),
+            total_empty_frames,
         )

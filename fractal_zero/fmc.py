@@ -1,3 +1,4 @@
+from logging import warn
 import torch
 import numpy as np
 import networkx as nx
@@ -125,21 +126,18 @@ class FMC:
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
 
-        if self.config.use_wandb:
-            wandb.log(
-                {
-                    **mean_min_max_dict("fmc/visit_buffer", self.visit_buffer.float()),
-                    **mean_min_max_dict("fmc/value_sum_buffer", self.value_sum_buffer),
-                    **mean_min_max_dict(
-                        "fmc/average_value_buffer",
-                        self.value_sum_buffer / self.visit_buffer.float(),
-                    ),
-                    **mean_min_max_dict(
-                        "fmc/clone_receives", self.clone_receives.float()
-                    ),
-                },
-                commit=False,
-            )
+        self.log(
+            {
+                **mean_min_max_dict("fmc/visit_buffer", self.visit_buffer.float()),
+                **mean_min_max_dict("fmc/value_sum_buffer", self.value_sum_buffer),
+                **mean_min_max_dict(
+                    "fmc/average_value_buffer",
+                    self.value_sum_buffer / self.visit_buffer.float(),
+                ),
+                **mean_min_max_dict("fmc/clone_receives", self.clone_receives.float()),
+            },
+            commit=False,
+        )
 
         # TODO: experiment with these
         if greedy_action:
@@ -190,16 +188,29 @@ class FMC:
         rel_distances = _relativize_vector(self.distances)
         self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
 
-        if self.config.use_wandb:
-            wandb.log(
-                {
-                    **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
-                    **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
-                    **mean_min_max_dict("fmc/distances", self.distances),
-                    **mean_min_max_dict("fmc/auxiliaries", self.rewards),
-                },
-                commit=False,
-            )
+        self.log(
+            {
+                **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
+                **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
+                **mean_min_max_dict("fmc/distances", self.distances),
+                **mean_min_max_dict("fmc/auxiliaries", self.rewards),
+            },
+            commit=False,
+        )
+
+    @torch.no_grad()
+    def _determine_clone_receives(self):
+        # keep track of which walkers received clones and how many.
+        clones_received_per_walker = torch.bincount(
+            self.clone_partners[self.clone_mask]
+        ).unsqueeze(-1)
+
+        n = len(clones_received_per_walker)
+
+        self.clone_receives[:n] += clones_received_per_walker
+
+        self.clone_receive_mask = torch.zeros_like(self.clone_mask)
+        self.clone_receive_mask[:n] = clones_received_per_walker.squeeze(-1) > 0
 
     @torch.no_grad()
     def _determine_clone_mask(self):
@@ -214,13 +225,14 @@ class FMC:
         r = np.random.uniform()
         self.clone_mask = (self.clone_probabilities >= r).cpu()
 
-        if self.config.use_wandb:
-            wandb.log(
-                {
-                    "fmc/num_cloned": self.clone_mask.sum(),
-                },
-                commit=False,
-            )
+        self._determine_clone_receives()
+
+        self.log(
+            {
+                "fmc/num_cloned": self.clone_mask.sum(),
+            },
+            commit=False,
+        )
 
     @torch.no_grad()
     def _prepare_clone_variables(self):
@@ -253,14 +265,6 @@ class FMC:
             print("clone mask", self.clone_mask)
             print("state before", self.state)
 
-        # keep track of which walkers received clones and how many.
-        clones_received_per_walker = torch.bincount(
-            self.clone_partners[self.clone_mask]
-        ).unsqueeze(-1)
-        self.clone_receives[
-            : len(clones_received_per_walker)
-        ] += clones_received_per_walker
-
         # execute clones
         self._clone_vector(self.state)
         self._clone_vector(self.actions)
@@ -273,20 +277,33 @@ class FMC:
         if self.verbose:
             print("state after", self.state)
 
+    def _get_backprop_mask(self):
+        # TODO: docstring
+
+        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
+        # to backpropagate the value regardless of if they are cloning or not.
+        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
+        force_backpropagate_all = self.simulation_iteration == self.k - 1
+
+        strat = self.config.fmc_backprop_strategy
+        if strat == "all" or force_backpropagate_all:
+            mask = torch.ones_like(self.clone_mask)
+        elif strat == "clone_mask":
+            mask = self.clone_mask
+        elif strat == "clone_participants":
+            mask = torch.logical_or(self.clone_mask, self.clone_receive_mask)
+        else:
+            raise ValueError(f'FMC Backprop strategy "{strat}" is not supported.')
+
+        return mask
+
     def _backpropagate_reward_buffer(self):
         """This essentially does the backpropagate step that MCTS does, although instead of maintaining an entire tree, it maintains
         value sums and visit counts for each walker. These values may be subsequently cloned. There is some information loss
         during this clone, but it should be minimally impactful.
         """
 
-        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
-        # to backpropagate the value regardless of if they are cloning or not.
-        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
-        backpropagate_all = self.simulation_iteration == self.k - 1
-
-        mask = (
-            torch.ones_like(self.clone_mask) if backpropagate_all else self.clone_mask
-        )
+        mask = self._get_backprop_mask()
 
         current_value_buffer = torch.zeros_like(self.value_sum_buffer)
         for i in reversed(range(self.simulation_iteration)):
@@ -327,3 +344,13 @@ class FMC:
 
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
+
+    def log(self, *args, **kwargs):
+        if self.config.wandb_config is None:
+            return
+
+        if wandb.run is None:
+            # warn("Weights and biases config was provided, but wandb.init was not called.")
+            return
+
+        wandb.log(*args, **kwargs)

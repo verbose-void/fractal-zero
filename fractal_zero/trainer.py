@@ -23,11 +23,16 @@ class FractalZeroTrainer:
 
         if self.config.optimizer.lower() == "sgd":
             self.optimizer = torch.optim.SGD(
-                self.fractal_zero.parameters(), lr=self.config.learning_rate
+                self.fractal_zero.parameters(),
+                lr=self.config.learning_rate,
+                weight_decay=self.config.weight_decay,
+                momentum=self.config.momentum,
             )
         elif self.config.optimizer.lower() == "adam":
             self.optimizer = torch.optim.Adam(
-                self.fractal_zero.parameters(), lr=self.config.learning_rate
+                self.fractal_zero.parameters(),
+                lr=self.config.learning_rate,
+                weight_decay=self.config.weight_decay,
             )
 
         if self.config.use_wandb:
@@ -62,6 +67,7 @@ class FractalZeroTrainer:
             self.actions,
             self.target_auxiliaries,
             self.target_values,
+            self.num_empty_frames,
         ) = batch
 
         return batch
@@ -123,6 +129,7 @@ class FractalZeroTrainer:
                         self.data_handler.replay_buffer.get_episode_lengths(),
                     ),
                     "data/batch_size": len(self.target_auxiliaries),
+                    "data/empty_frames_in_batch": self.num_empty_frames,
                 }
             )
 
@@ -147,7 +154,7 @@ class FractalZeroTrainer:
     def checkpoint_filename(self) -> str:
         return f"{self.run_name}.checkpoint"
 
-    def save_checkpoint(self, folder: str="checkpoints") -> str:
+    def save_checkpoint(self, folder: str = "checkpoints") -> str:
         # TODO: optionally save to wandb
 
         os.makedirs(folder, exist_ok=True)

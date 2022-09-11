@@ -31,21 +31,19 @@ class FractalZero(torch.nn.Module):
             greedy_action = True
             k = self.config.evaluation_lookahead_steps
 
+        _, value_estimate = self.model.prediction_model.forward(state)
+
         if self.config.lookahead_steps > 0:
             self.fmc.set_state(state)
             action = self.fmc.simulate(k, greedy_action=greedy_action)
-            return action, self.fmc.root_value
+            return action, self.fmc.root_value, value_estimate.item()
 
         raise NotImplementedError("Action prediction not yet working.")
-        action, value_estimate = self.model.prediction_model.forward(state)
-        return action, value_estimate
 
     def play_game(
         self,
         render: bool = False,
     ):
-        # TODO: create config class
-
         env = self.config.env
 
         obs = env.reset()
@@ -53,18 +51,30 @@ class FractalZero(torch.nn.Module):
 
         self.fmc = FMC(self.config, verbose=False)
 
-        for _ in range(self.config.max_game_steps):
+        for step in range(self.config.max_game_steps):
             obs = torch.tensor(obs, device=self.config.device)
-            action, value_estimate = self.forward(obs)
+            action, root_value, value_estimate = self.forward(obs)
             obs, reward, done, info = env.step(action)
 
-            game_history.append(action, obs, reward, value_estimate)
+            game_history.append(action, obs, reward, root_value)
+
+            if render:
+                print()
+                print(f"step={step}")
+                print(f"reward={reward}, done={done}, info={info}")
+                print(
+                    f"action={action}, root_value={root_value}, value_estimate={value_estimate}"
+                )
+                env.render()
+                sleep(0.1)
 
             if done:
                 break
 
-            if render:
-                env.render()
-                sleep(0.1)
+        if render:
+            print()
+            print("game summary:")
+            print(f"cumulative rewards: {sum(game_history.environment_reward_signals)}")
+            print(f"episode length: {len(game_history)}")
 
         return game_history

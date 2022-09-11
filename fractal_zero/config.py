@@ -14,6 +14,8 @@ DEFAULT_DEVICE = (
 
 @dataclass
 class FractalZeroConfig:
+    # TODO: break config into multiple parts (FMC, Trainer, etc.)
+
     env: gym.Env
     joint_model: JointModel
 
@@ -22,15 +24,20 @@ class FractalZeroConfig:
     max_game_steps: int = 200
 
     max_batch_size: int = 128
+    dynamic_batch_size: bool = True
     gamma: float = 0.99
     unroll_steps: int = 16
+    minimize_batch_padding: bool = True
     learning_rate: float = 0.001
+    weight_decay: float = 1e-4
+    momentum: float = 0.9  # only if optimizer is SGD
     optimizer: str = "SGD"
 
     num_walkers: int = 64
     balance: float = 1
     lookahead_steps: int = 64
     evaluation_lookahead_steps: int = 64
+    fmc_backprop_strategy: str = "all"  # all, clone_mask, or clone_participants
 
     device: torch.device = DEFAULT_DEVICE
 
