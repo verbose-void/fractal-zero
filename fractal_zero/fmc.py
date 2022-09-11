@@ -9,18 +9,7 @@ import matplotlib.pyplot as plt
 from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.models.joint_model import JointModel
-from fractal_zero.utils import mean_min_max_dict
-
-
-@torch.no_grad()
-def _relativize_vector(vector):
-    std = vector.std()
-    if std == 0:
-        return torch.ones(len(vector))
-    standard = (vector - vector.mean()) / std
-    standard[standard > 0] = torch.log(1 + standard[standard > 0]) + 1
-    standard[standard <= 0] = torch.exp(standard[standard <= 0])
-    return standard
+from fractal_zero.utils import mean_min_max_dict, relativize_vector
 
 
 class FMC:
@@ -186,8 +175,8 @@ class FMC:
 
         # TODO EXPERIMENT: should we be using the value estimates? or should we be using the value buffer?
         # or should we be using the cumulative rewards? (the original FMC authors use cumulative rewards)
-        rel_values = _relativize_vector(self.predicted_values).squeeze(-1).cpu()
-        rel_distances = _relativize_vector(self.distances).cpu()
+        rel_values = relativize_vector(self.predicted_values).squeeze(-1).cpu()
+        rel_distances = relativize_vector(self.distances).cpu()
         self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
 
         self.log(

@@ -22,3 +22,16 @@ def mean_min_max_dict(name: str, arr) -> dict:
         f"{name}/min": arr.min(),
         f"{name}/max": arr.max(),
     }
+
+
+@torch.no_grad()
+def relativize_vector(vector):
+    # TODO: docstring
+
+    std = vector.std()
+    if std == 0:
+        return torch.ones(len(vector))
+    standard = (vector - vector.mean()) / std
+    standard[standard > 0] = torch.log(1 + standard[standard > 0]) + 1
+    standard[standard <= 0] = torch.exp(standard[standard <= 0])
+    return standard
