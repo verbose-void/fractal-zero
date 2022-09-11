@@ -69,4 +69,10 @@ class FractalZero(torch.nn.Module):
             if done:
                 break
 
+        if render:
+            print()
+            print("game summary:")
+            print(f"cumulative rewards: {sum(game_history.environment_reward_signals)}")
+            print(f"episode length: {len(game_history)}")
+
         return game_history
