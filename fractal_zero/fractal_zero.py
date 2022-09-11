@@ -51,18 +51,22 @@ class FractalZero(torch.nn.Module):
 
         self.fmc = FMC(self.config, verbose=False)
 
-        for _ in range(self.config.max_game_steps):
+        for step in range(self.config.max_game_steps):
             obs = torch.tensor(obs, device=self.config.device)
             action, value_estimate = self.forward(obs)
             obs, reward, done, info = env.step(action)
 
             game_history.append(action, obs, reward, value_estimate)
 
-            if done:
-                break
-
             if render:
+                print()
+                print(f"step={step}")
+                print(f"reward={reward}, done={done}, info={info}")
+                print(f"action={action}, value_estimate={value_estimate}")
                 env.render()
                 sleep(0.1)
+
+            if done:
+                break
 
         return game_history

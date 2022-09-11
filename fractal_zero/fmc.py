@@ -1,3 +1,4 @@
+from logging import warn
 import torch
 import numpy as np
 import networkx as nx
@@ -125,21 +126,20 @@ class FMC:
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
 
-        if self.config.use_wandb:
-            wandb.log(
-                {
-                    **mean_min_max_dict("fmc/visit_buffer", self.visit_buffer.float()),
-                    **mean_min_max_dict("fmc/value_sum_buffer", self.value_sum_buffer),
-                    **mean_min_max_dict(
-                        "fmc/average_value_buffer",
-                        self.value_sum_buffer / self.visit_buffer.float(),
-                    ),
-                    **mean_min_max_dict(
-                        "fmc/clone_receives", self.clone_receives.float()
-                    ),
-                },
-                commit=False,
-            )
+        self.log(
+            {
+                **mean_min_max_dict("fmc/visit_buffer", self.visit_buffer.float()),
+                **mean_min_max_dict("fmc/value_sum_buffer", self.value_sum_buffer),
+                **mean_min_max_dict(
+                    "fmc/average_value_buffer",
+                    self.value_sum_buffer / self.visit_buffer.float(),
+                ),
+                **mean_min_max_dict(
+                    "fmc/clone_receives", self.clone_receives.float()
+                ),
+            },
+            commit=False,
+        )
 
         # TODO: experiment with these
         if greedy_action:
@@ -190,16 +190,15 @@ class FMC:
         rel_distances = _relativize_vector(self.distances)
         self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
 
-        if self.config.use_wandb:
-            wandb.log(
-                {
-                    **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
-                    **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
-                    **mean_min_max_dict("fmc/distances", self.distances),
-                    **mean_min_max_dict("fmc/auxiliaries", self.rewards),
-                },
-                commit=False,
-            )
+        self.log(
+            {
+                **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
+                **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
+                **mean_min_max_dict("fmc/distances", self.distances),
+                **mean_min_max_dict("fmc/auxiliaries", self.rewards),
+            },
+            commit=False,
+        )
 
     @torch.no_grad()
     def _determine_clone_mask(self):
@@ -214,13 +213,12 @@ class FMC:
         r = np.random.uniform()
         self.clone_mask = (self.clone_probabilities >= r).cpu()
 
-        if self.config.use_wandb:
-            wandb.log(
-                {
-                    "fmc/num_cloned": self.clone_mask.sum(),
-                },
-                commit=False,
-            )
+        self.log(
+            {
+                "fmc/num_cloned": self.clone_mask.sum(),
+            },
+            commit=False,
+        )
 
     @torch.no_grad()
     def _prepare_clone_variables(self):
@@ -327,3 +325,13 @@ class FMC:
 
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
+
+    def log(self, *args, **kwargs):
+        if self.config.wandb_config is None:
+            return
+
+        if wandb.run is None:
+            # warn("Weights and biases config was provided, but wandb.init was not called.")
+            return
+
+        wandb.log(*args, **kwargs)
