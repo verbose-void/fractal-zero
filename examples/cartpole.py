@@ -37,7 +37,7 @@ def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
         max_game_steps=200,
         max_batch_size=128,
         unroll_steps=16,
-        learning_rate=0.002,
+        learning_rate=0.001,
         optimizer="SGD",
         num_walkers=64,
         balance=1.0,
@@ -55,7 +55,7 @@ def train_cartpole():
     train_every = 1
     train_batches = 2
     evaluate_every = 16
-    checkpoint_every = 128
+    checkpoint_every = evaluate_every
 
     # TODO: make this logic automatic in config somehow?
     config.joint_model = config.joint_model.to(config.device)

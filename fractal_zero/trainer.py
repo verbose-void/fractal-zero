@@ -23,11 +23,11 @@ class FractalZeroTrainer:
 
         if self.config.optimizer.lower() == "sgd":
             self.optimizer = torch.optim.SGD(
-                self.fractal_zero.parameters(), lr=self.config.learning_rate
+                self.fractal_zero.parameters(), lr=self.config.learning_rate, weight_decay=self.config.weight_decay, momentum=self.config.momentum
             )
         elif self.config.optimizer.lower() == "adam":
             self.optimizer = torch.optim.Adam(
-                self.fractal_zero.parameters(), lr=self.config.learning_rate
+                self.fractal_zero.parameters(), lr=self.config.learning_rate, weight_decay=self.config.weight_decay,
             )
 
         if self.config.use_wandb:
