@@ -1,0 +1,4 @@
+from fractal_zero.models.dynamics import FullyConnectedDynamicsModel
+from fractal_zero.models.representation import FullyConnectedRepresentationModel
+from fractal_zero.models.prediction import FullyConnectedPredictionModel
+from fractal_zero.models.joint_model import JointModel
