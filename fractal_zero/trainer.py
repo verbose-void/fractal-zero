@@ -129,6 +129,11 @@ class FractalZeroTrainer:
 
         composite_loss = auxiliary_loss + value_loss
 
+        # TODO: logging is starting to get ugly, refactor.
+        vrs = self.data_handler.replay_buffer.virtual_rewards
+        if vrs is not None:
+            self.log(mean_min_max_dict("data/replay_buffer/virtual_rewards", vrs), commit=False)
+
         self.log(
             {
                 "losses/auxiliary": auxiliary_loss.item(),
