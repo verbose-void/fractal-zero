@@ -35,6 +35,7 @@ def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
         env,
         joint_model,
         max_replay_buffer_size=512,
+        replay_buffer_pop_strategy="balanced",
         num_games=5_000,
         max_game_steps=200,
         max_batch_size=128,
@@ -47,7 +48,7 @@ def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
         balance=1.0,
         lookahead_steps=64,
         evaluation_lookahead_steps=64,
-        # wandb_config={"project": "fractal_zero_cartpole"},
+        wandb_config={"project": "fractal_zero_cartpole"},
     )
 
 

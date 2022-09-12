@@ -29,7 +29,7 @@ class FractalZeroConfig:
     env: gym.Env
     joint_model: JointModel
 
-    max_replay_buffer_size: int = 8
+    max_replay_buffer_size: int = 512
     replay_buffer_pop_strategy: str = "balanced"  # oldest, random, or balanced
     num_games: int = 5_000
     max_game_steps: int = 200
