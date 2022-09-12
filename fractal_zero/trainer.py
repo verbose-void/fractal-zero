@@ -167,6 +167,29 @@ class FractalZeroTrainer:
 
         self.completed_train_steps += 1
 
+    def evaluate(self, steps: int, save_checkpoint: bool=True):
+        self.fractal_zero.eval()
+
+        game_lengths = []
+        cumulative_rewards = []
+        for _ in range(steps):
+            game_history = self.fractal_zero.play_game()
+            game_lengths.append(len(game_history))
+            cumulative_reward = sum(game_history.environment_reward_signals)
+            cumulative_rewards.append(cumulative_reward)
+
+        self.log({
+            **mean_min_max_dict("evaluation/episode_length", game_lengths),
+                **mean_min_max_dict(
+                    "evaluation/cumulative_reward", cumulative_rewards
+                ),
+            },
+            commit=False,
+        )
+
+        if save_checkpoint:
+            self.save_checkpoint()
+
     @property
     def checkpoint_filename(self) -> str:
         return f"{self.run_name}.checkpoint"
