@@ -130,9 +130,14 @@ class FractalZeroTrainer:
         composite_loss = auxiliary_loss + value_loss
 
         # TODO: logging is starting to get ugly, refactor.
-        vrs = self.data_handler.replay_buffer.virtual_rewards
+        rb = self.data_handler.replay_buffer
+        vrs = rb.virtual_rewards
         if vrs is not None:
-            self.log(mean_min_max_dict("data/replay_buffer/virtual_rewards", vrs), commit=False)
+            self.log({
+                **mean_min_max_dict("data/replay_buffer/virtual_rewards", vrs),
+                "data/replay_buffer/exploit_std": rb.exploit.std(),
+                "data/replay_buffer/explore_std": rb.explore.std(),
+            }, commit=False)
 
         self.log(
             {
@@ -156,9 +161,13 @@ class FractalZeroTrainer:
 
         return composite_loss
 
+    def play_game_store_history(self):
+        self.fractal_zero.train()
+        game_history = self.fractal_zero.play_game()
+        self.data_handler.replay_buffer.append(game_history)
+
     def train_step(self):
         self.fractal_zero.train()
-
         self.optimizer.zero_grad()
 
         self._get_batch()

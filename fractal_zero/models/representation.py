@@ -18,7 +18,6 @@ class FullyConnectedRepresentationModel(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(self.embedding_size, self.embedding_size),
             torch.nn.ReLU(),
-            torch.nn.Linear(self.embedding_size, self.embedding_size),
         )
 
     def forward(self, observation):

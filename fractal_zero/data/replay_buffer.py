@@ -58,6 +58,9 @@ class ReplayBuffer:
 
         self.game_histories = []
 
+        # TODO: move these calculations somewhere else
+        self.exploit = None
+        self.explore = None
         self.virtual_rewards = None
 
     def _maybe_pop_one(self):
@@ -73,9 +76,9 @@ class ReplayBuffer:
         elif strat == "random":
             i = np.random.randint(0, len(self))
         elif strat == "balanced":
-            exploit = torch.tensor(self.get_episode_lengths(), dtype=float)
-            explore = self._get_episode_distances()
-            self.virtual_rewards = calculate_virtual_rewards(-exploit, -explore, softmax=True)
+            self.exploit = -torch.tensor(self.get_episode_lengths(), dtype=float)
+            self.explore = -self._get_episode_distances()
+            self.virtual_rewards = calculate_virtual_rewards(self.exploit, self.explore, softmax=True)
             i = np.random.choice(range(len(self)), p=self.virtual_rewards)
         else:
             raise NotImplementedError(
