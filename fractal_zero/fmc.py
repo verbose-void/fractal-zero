@@ -72,8 +72,8 @@ class FMC:
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
     @torch.no_grad()
-    def simulate(self, k: int, greedy_action: bool = True):
-        """Run FMC for k iterations, returning the best action that was taken at the root/initial state."""
+    def simulate(self, k: int, return_greedy_action: bool = True):
+        """Run FMC for k iterations and return the "recommended" action."""
 
         self.k = k
         assert self.k > 0
@@ -129,7 +129,7 @@ class FMC:
         )
 
         # TODO: experiment with these
-        if greedy_action:
+        if return_greedy_action:
             return self._get_highest_value_action()
         return self._get_action_with_highest_clone_receives()
 
