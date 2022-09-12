@@ -2,6 +2,7 @@ from datetime import datetime
 import torch
 
 import wandb
+import numpy as np
 import os
 
 from fractal_zero.data.data_handler import DataHandler
@@ -26,6 +27,7 @@ class FractalZeroTrainer:
         self._setup_logger()
 
         self.completed_train_steps = 0
+        self.best_eval_cumulative_reward = float("-inf")
 
     def _setup_optimizer(self):
         op = self.config.optimizer.lower()
@@ -181,7 +183,7 @@ class FractalZeroTrainer:
 
         self.completed_train_steps += 1
 
-    def evaluate(self, steps: int, save_checkpoint: bool=True):
+    def evaluate(self, steps: int, save_checkpoint: bool=True, only_checkpoint_best: bool=True):
         self.fractal_zero.eval()
 
         game_lengths = []
@@ -201,8 +203,18 @@ class FractalZeroTrainer:
             commit=False,
         )
 
+        was_best = False
+        mean_cumulative_reward = np.mean(cumulative_reward)
+        if mean_cumulative_reward > self.best_eval_cumulative_reward:
+            self.best_eval_cumulative_reward = mean_cumulative_reward
+            was_best = True
+
         if save_checkpoint:
-            self.save_checkpoint()
+            if only_checkpoint_best:
+                if was_best:
+                    self.save_checkpoint()
+            else:
+                self.save_checkpoint()
 
     @property
     def checkpoint_filename(self) -> str:
