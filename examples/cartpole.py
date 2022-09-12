@@ -47,7 +47,7 @@ def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
         balance=1.0,
         lookahead_steps=64,
         evaluation_lookahead_steps=64,
-        wandb_config={"project": "fractal_zero_cartpole"},
+        # wandb_config={"project": "fractal_zero_cartpole"},
     )
 
 

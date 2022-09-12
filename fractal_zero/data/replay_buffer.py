@@ -1,7 +1,8 @@
 import numpy as np
+import torch
 
 from fractal_zero.config import FractalZeroConfig
-from fractal_zero.utils import calculate_virtual_rewards
+from fractal_zero.utils import calculate_distances, calculate_virtual_rewards, determine_partners
 
 
 class GameHistory:
@@ -26,7 +27,7 @@ class GameHistory:
         self.environment_reward_signals.append(environment_reward_signal)
         self.values.append(value)
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, index):
         return (
             self.observations[index],
             self.actions[index],
@@ -67,12 +68,12 @@ class ReplayBuffer:
             i = 0
         elif strat == "random":
             i = np.random.randint(0, len(self))
-        elif strat == "virtual_reward":
-            # TODO: use the model embeddings to calculate the explore component of the virtual rewards?
+        elif strat == "balanced":
 
             exploit = self.get_episode_lengths()
             explore = self._get_episode_distances()
             p = calculate_virtual_rewards(exploit, explore, softmax=True)
+            print(p)
             i = np.random.choice(range(len(self)), p=p)
         else:
             raise NotImplementedError(
@@ -143,7 +144,17 @@ class ReplayBuffer:
         return [len(history) for history in self.game_histories]
 
     def _get_episode_distances(self):
-        raise NotImplementedError # TODO
+        # TODO: use model embedding instead of last observations
+        
+        last_observations = torch.zeros((len(self), *self.config.observation_shape))
+        for i in range(len(self)):
+            last_observations[i] = self[i][-1]
+        partners = determine_partners(len(self))
+
+        return calculate_distances(last_observations, partners)
+
+    def __getitem__(self, index):
+        return self.game_histories[index]
 
     def __len__(self):
         return len(self.game_histories)
