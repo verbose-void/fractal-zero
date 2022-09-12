@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.models.joint_model import JointModel
-from fractal_zero.utils import calculate_virtual_rewards, mean_min_max_dict, relativize_vector
+from fractal_zero.utils import calculate_distances, calculate_virtual_rewards, determine_partners, mean_min_max_dict, relativize_vector
 
 
 class FMC:
@@ -151,16 +151,13 @@ class FMC:
     def _assign_clone_partners(self):
         """For the cloning phase, walkers need a partner to determine if they should be sent as reinforcements to their partner's state."""
 
-        choices = np.random.choice(np.arange(self.num_walkers), size=self.num_walkers)
-        self.clone_partners = torch.tensor(choices, dtype=int)
+        self.clone_partners = determine_partners(self.num_walkers)
 
     @torch.no_grad()
     def _calculate_distances(self):
         """For the cloning phase, we calculate the distances between each walker and their partner for balancing exploration."""
 
-        self.distances = torch.linalg.norm(
-            self.state - self.state[self.clone_partners], dim=1
-        )
+        self.distances = calculate_distances(self.state, self.clone_partners)
 
     @torch.no_grad()
     def _calculate_virtual_rewards(self):

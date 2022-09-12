@@ -5,7 +5,6 @@ from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.data.replay_buffer import GameHistory
 from fractal_zero.fmc import FMC
-from fractal_zero.models.joint_model import JointModel
 
 
 class FractalZero(torch.nn.Module):

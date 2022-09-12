@@ -1,6 +1,7 @@
 import numpy as np
 
 from fractal_zero.config import FractalZeroConfig
+from fractal_zero.utils import calculate_virtual_rewards
 
 
 class GameHistory:
@@ -67,7 +68,12 @@ class ReplayBuffer:
         elif strat == "random":
             i = np.random.randint(0, len(self))
         elif strat == "virtual_reward":
-            raise NotImplementedError
+            # TODO: use the model embeddings to calculate the explore component of the virtual rewards?
+
+            exploit = self.get_episode_lengths()
+            explore = self._get_episode_distances()
+            p = calculate_virtual_rewards(exploit, explore, softmax=True)
+            i = np.random.choice(range(len(self)), p=p)
         else:
             raise NotImplementedError(
                 f'Replay buffer pop strategy "{strat}" is not supported.'
@@ -135,6 +141,9 @@ class ReplayBuffer:
 
     def get_episode_lengths(self):
         return [len(history) for history in self.game_histories]
+
+    def _get_episode_distances(self):
+        raise NotImplementedError # TODO
 
     def __len__(self):
         return len(self.game_histories)
