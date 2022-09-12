@@ -57,7 +57,7 @@ def calculate_distances(vector: torch.Tensor, partners: torch.Tensor, dim: int=1
 
 
 @torch.no_grad()
-def calculate_virtual_rewards(exploit_vector: torch.Tensor, explore_vector: torch.Tensor, balance: float=1.0, to_cpu: bool=True, softmax: bool=False, dim: int=None):
+def calculate_virtual_rewards(exploit_vector: torch.Tensor, explore_vector: torch.Tensor, balance: float=1.0, to_cpu: bool=True, softmax: bool=False, dim: int=0):
     """Virtual rewards are a method of balancing exploration and exploitation for some purpose. The idea originates
     from FragileAI's Fractal Monte Carlo as part of the cellular automota evolution strategy, however it can be generally
     used for many purposes by replacing the exploit and explore vectors with other various metrics so this function exists
