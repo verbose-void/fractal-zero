@@ -35,7 +35,7 @@ class FractalZero(torch.nn.Module):
 
         _, value_estimate = self.model.prediction_model.forward(self.state)
 
-        if self.config.lookahead_steps > 0:
+        if k > 0:
             self.fmc.set_state(self.state)
             action = self.fmc.simulate(k, greedy_action=greedy_action)
             return action, self.fmc.root_value, value_estimate.item()
