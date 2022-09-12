@@ -13,6 +13,8 @@ class GameHistory:
         self.environment_reward_signals = []
         self.values = []
 
+        # TODO: finalize game histories into tensors after all frames have been added?
+
     @property
     def observation_shape(self):
         return self.observations[0].shape
@@ -70,10 +72,11 @@ class ReplayBuffer:
             i = np.random.randint(0, len(self))
         elif strat == "balanced":
 
-            exploit = self.get_episode_lengths()
+            exploit = torch.tensor(self.get_episode_lengths(), dtype=float)
             explore = self._get_episode_distances()
-            p = calculate_virtual_rewards(exploit, explore, softmax=True)
-            print(p)
+
+            # NOTE: the probabilities get inverted
+            p = 1 - calculate_virtual_rewards(exploit, explore, softmax=True)
             i = np.random.choice(range(len(self)), p=p)
         else:
             raise NotImplementedError(
@@ -146,12 +149,12 @@ class ReplayBuffer:
     def _get_episode_distances(self):
         # TODO: use model embedding instead of last observations
         
-        last_observations = torch.zeros((len(self), *self.config.observation_shape))
+        last_observations = np.zeros((len(self), *self.config.observation_shape))
         for i in range(len(self)):
-            last_observations[i] = self[i][-1]
+            last_observations[i] = self[i][-1][0]
         partners = determine_partners(len(self))
 
-        return calculate_distances(last_observations, partners)
+        return calculate_distances(torch.tensor(last_observations, dtype=float), partners)
 
     def __getitem__(self, index):
         return self.game_histories[index]

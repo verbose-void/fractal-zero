@@ -77,7 +77,7 @@ def calculate_virtual_rewards(exploit_vector: torch.Tensor, explore_vector: torc
     virtual_rewards = exploit * explore
 
     if softmax:
-        torch.nn.functional.softmax(virtual_rewards, dim=dim)
+        return torch.nn.functional.softmax(virtual_rewards, dim=dim)
 
     return virtual_rewards
 
