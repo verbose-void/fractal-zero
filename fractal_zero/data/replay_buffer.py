@@ -75,8 +75,7 @@ class ReplayBuffer:
             exploit = torch.tensor(self.get_episode_lengths(), dtype=float)
             explore = self._get_episode_distances()
 
-            # NOTE: the probabilities get inverted
-            p = 1 - calculate_virtual_rewards(exploit, explore, softmax=True)
+            p = calculate_virtual_rewards(-exploit, -explore, softmax=True)
             i = np.random.choice(range(len(self)), p=p)
         else:
             raise NotImplementedError(
