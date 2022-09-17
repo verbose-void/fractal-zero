@@ -143,6 +143,7 @@ class FractalZeroTrainer:
 
         self.log(
             {
+                "train/step": self.train_step,
                 "losses/auxiliary": auxiliary_loss.item(),
                 "losses/value": value_loss.item(),
                 "losses/composite": composite_loss.item(),
