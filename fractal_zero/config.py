@@ -28,7 +28,9 @@ class FractalZeroConfig:
     # TODO: break config into multiple parts (FMC, Trainer, etc.)
 
     env: gym.Env
-    joint_model: JointModel = None
+
+    # TODO: if using AlphaZero style, autodetermine the embedding size.
+    joint_model: JointModel
 
     # when True the lookahead search uses the environment directly (AlphaZero Style).
     # when False, the lookahead search uses a DynamicsModel instead of the environment (MuZero Style).
