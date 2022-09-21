@@ -7,6 +7,7 @@ from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import mean_min_max_dict
+from fractal_zero.vectorized_environment import VectorizedEnvironment
 
 
 @torch.no_grad()
@@ -30,24 +31,17 @@ class FMC:
     approach, it's natively vectorized so it can be put onto the GPU.
     """
 
+    env_simulator: VectorizedEnvironment
+
     def __init__(
         self,
         config: FractalZeroConfig,
         verbose: bool = False,
     ):
         self.config = config
-
         self.model = config.joint_model
 
         self.verbose = verbose
-
-    def set_state(self, state: torch.Tensor):
-        # set the initial states for all walkers
-        batched_initial_state = torch.zeros(
-            (self.num_walkers, *state.shape), device=self.config.device
-        )
-        batched_initial_state[:] = state
-        self.dynamics_model.set_state(batched_initial_state)
 
     @property
     def num_walkers(self) -> int:

@@ -5,6 +5,7 @@ from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.data.replay_buffer import GameHistory
 from fractal_zero.search.fmc import FMC
+from fractal_zero.vectorized_environment import RayVectorizedEnvironment, VectorizedDynamicsModelEnvironment
 
 
 class FractalZero(torch.nn.Module):
@@ -18,10 +19,23 @@ class FractalZero(torch.nn.Module):
         # TODO: reuse FMC instance?
         self.fmc = None
 
+        self.actual_env = self.config.env
+
+        # TODO: explain
+        if self.config.search_using_actual_environment:
+            self.vectorized_environment = RayVectorizedEnvironment(
+                self.actual_env, 
+                n=self.config.num_walkers,
+            )
+        else:
+            self.vectorized_environment = VectorizedDynamicsModelEnvironment(
+                self.actual_env,
+                n=self.config.num_walkers,
+                joint_model=self.model,
+            )
+
     def forward(self, observation):
         # TODO: docstring, note that lookahead_steps == 0 means there won't be a tree search
-
-        state = self.model.representation_model.forward(observation)
 
         if self.training:
             greedy_action = False
@@ -30,12 +44,10 @@ class FractalZero(torch.nn.Module):
             greedy_action = True
             k = self.config.evaluation_lookahead_steps
 
-        _, value_estimate = self.model.prediction_model.forward(state)
-
         if self.config.lookahead_steps > 0:
-            self.fmc.set_state(state)
+            self.vectorized_environment.set_all_states(self.actual_env, observation)
             action = self.fmc.simulate(k, greedy_action=greedy_action)
-            return action, self.fmc.root_value, value_estimate.item()
+            return action, self.fmc.root_value
 
         raise NotImplementedError("Action prediction not yet working.")
 
@@ -43,17 +55,16 @@ class FractalZero(torch.nn.Module):
         self,
         render: bool = False,
     ):
-        env = self.config.env
 
-        obs = env.reset()
+        obs = self.actual_env.reset()
         game_history = GameHistory(obs)
 
         self.fmc = FMC(self.config, verbose=False)
 
         for step in range(self.config.max_game_steps):
             obs = torch.tensor(obs, device=self.config.device)
-            action, root_value, value_estimate = self.forward(obs)
-            obs, reward, done, info = env.step(action)
+            action, root_value = self.forward(obs)
+            obs, reward, done, info = self.actual_env.step(action)
 
             game_history.append(action, obs, reward, root_value)
 
@@ -62,9 +73,9 @@ class FractalZero(torch.nn.Module):
                 print(f"step={step}")
                 print(f"reward={reward}, done={done}, info={info}")
                 print(
-                    f"action={action}, root_value={root_value}, value_estimate={value_estimate}"
+                    f"action={action}, root_value={root_value}" #, value_estimate={value_estimate}"
                 )
-                env.render()
+                self.actual_env.render()
                 sleep(0.1)
 
             if done:

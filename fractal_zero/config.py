@@ -27,7 +27,11 @@ class FractalZeroConfig:
     # TODO: break config into multiple parts (FMC, Trainer, etc.)
 
     env: gym.Env
-    joint_model: JointModel = None  # if joint_model is None, the environment will be used during lookahead.
+    joint_model: JointModel = None
+
+    # when True the lookahead search uses the environment directly (AlphaZero Style).
+    # when False, the lookahead search uses a DynamicsModel instead of the environment (MuZero Style).
+    search_using_actual_environment: bool = True
 
     max_replay_buffer_size: int = 512
     replay_buffer_pop_strategy: str = "oldest"  # oldest or random
