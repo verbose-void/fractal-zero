@@ -117,7 +117,17 @@ class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
         raise NotImplementedError
 
     def batch_step(self, actions, *args, **kwargs):
-        return self.dynamics_model.forward(actions)
+        device = self.joint_model.device
+
+        if not isinstance(actions, torch.Tensor):
+            actions = torch.tensor(actions, device=device).float().unsqueeze(-1)
+
+        rewards = self.dynamics_model.forward(actions)
+        observations = self.dynamics_model.state
+        dones = torch.zeros(self.n, dtype=bool, device=device)
+        infos = [{} for _ in range(self.n)]
+
+        return observations, rewards, dones, infos
 
     def set_all_states(self, _, obs: np.ndarray):
         # TODO: explain, also how this interacts with FMC.
