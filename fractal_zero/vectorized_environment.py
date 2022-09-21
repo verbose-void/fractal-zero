@@ -9,7 +9,7 @@ import numpy as np
 from fractal_zero.models.joint_model import JointModel
 
 
-def _get_env(env: Union[str, gym.Env]) -> gym.Env:
+def load_environment(env: Union[str, gym.Env]) -> gym.Env:
     if isinstance(env, str):
         return gym.make(env)
     return env
@@ -21,7 +21,7 @@ class VectorizedEnvironment(ABC):
     n: int
 
     def __init__(self, env: Union[str, gym.Env], n: int):
-        env = _get_env(env)
+        env = load_environment(env)
         self.action_space = env.action_space
         self.observation_space = env.observation_space
         self.n = n
@@ -45,7 +45,7 @@ class VectorizedEnvironment(ABC):
 @ray.remote
 class _RayWrappedEnvironment:
     def __init__(self, env: Union[str, gym.Env]):
-        self._env = _get_env(env)
+        self._env = load_environment(env)
 
     def set_state(self, env: gym.Env):
         if not isinstance(env, gym.Env):
