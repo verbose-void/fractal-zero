@@ -27,7 +27,7 @@ class FractalZeroConfig:
     # TODO: break config into multiple parts (FMC, Trainer, etc.)
 
     env: gym.Env
-    joint_model: JointModel
+    joint_model: JointModel = None  # if joint_model is None, the environment will be used during lookahead.
 
     max_replay_buffer_size: int = 512
     replay_buffer_pop_strategy: str = "oldest"  # oldest or random
