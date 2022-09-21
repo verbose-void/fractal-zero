@@ -16,8 +16,7 @@ from tqdm import tqdm
 from fractal_zero.utils import mean_min_max_dict
 
 
-def get_cartpole_joint_model(env: gym.Env) -> JointModel:
-    embedding_size = 4
+def get_cartpole_joint_model(env: gym.Env, embedding_size: int=16) -> JointModel:
     out_features = 1
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
@@ -28,12 +27,16 @@ def get_cartpole_joint_model(env: gym.Env) -> JointModel:
     return JointModel(representation_model, dynamics_model, prediction_model)
 
 
-def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
-    joint_model = get_cartpole_joint_model(env)
+def get_cartpole_config(env: gym.Env, alphazero_style: bool) -> FractalZeroConfig:
+    if alphazero_style:
+        joint_model = get_cartpole_joint_model(env, embedding_size=4)
+    else:
+        joint_model = get_cartpole_joint_model(env, embedding_size=16)
 
     return FractalZeroConfig(
         env,
         joint_model,
+        search_using_actual_environment=alphazero_style,
         max_replay_buffer_size=64,
         num_games=1_024,
         max_game_steps=200,
@@ -47,13 +50,13 @@ def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
         balance=1.0,
         lookahead_steps=8,
         evaluation_lookahead_steps=8,
-        # wandb_config={"project": "fractal_zero_cartpole"},
+        wandb_config={"project": "fractal_zero_cartpole"},
     )
 
 
-def train_cartpole():
+def train_cartpole(alphazero_style: bool):
     env = gym.make("CartPole-v0")
-    config = get_cartpole_config(env)
+    config = get_cartpole_config(env, alphazero_style)
 
     # TODO: move into config?
     train_every = 1
@@ -113,4 +116,5 @@ def train_cartpole():
 
 
 if __name__ == "__main__":
-    train_cartpole()
+    alphazero_style = False
+    train_cartpole(alphazero_style)
