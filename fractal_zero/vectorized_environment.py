@@ -3,6 +3,8 @@ from typing import Union
 import gym
 import ray
 
+from fractal_zero.models.dynamics import FullyConnectedDynamicsModel
+
 
 class VectorizedEnvironment(ABC):
     action_space: gym.Space
@@ -40,3 +42,14 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
 
     def batch_step(self, action, *args, **kwargs):
         return ray.get([env.step.remote(action, *args, **kwargs) for env in self.envs])
+
+
+class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
+    def __init__(self, dynamics_model: FullyConnectedDynamicsModel):
+        self.dynamics_model = dynamics_model
+
+    def batch_reset(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def batch_step(self, actions, *args, **kwargs):
+        return self.dynamics_model.forward(actions)
