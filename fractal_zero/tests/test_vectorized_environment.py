@@ -8,12 +8,12 @@ from fractal_zero.models.representation import FullyConnectedRepresentationModel
 from fractal_zero.vectorized_environment import RayVectorizedEnvironment, VectorizedDynamicsModelEnvironment, VectorizedEnvironment, load_environment
 
 
-def _build_test_joint_model(env) -> JointModel:
+def build_test_joint_model(env, embedding_size: int = 8) -> JointModel:
     env = load_environment(env)
 
-    rep = FullyConnectedRepresentationModel(env, 8)
-    dyn = FullyConnectedDynamicsModel(env, 8, 1)
-    pred = FullyConnectedPredictionModel(env, 8)
+    rep = FullyConnectedRepresentationModel(env, embedding_size)
+    dyn = FullyConnectedDynamicsModel(env, embedding_size, 1)
+    pred = FullyConnectedPredictionModel(env, embedding_size)
 
     return JointModel(rep, dyn, pred)
 
@@ -44,7 +44,7 @@ def test_vectorized_cartpole_dynamics_model():
 
     env = load_environment("CartPole-v0")
 
-    joint_model = _build_test_joint_model(env)
+    joint_model = build_test_joint_model(env)
     vec_env = VectorizedDynamicsModelEnvironment(env, n=n, joint_model=joint_model)
 
     obs = env.reset()
