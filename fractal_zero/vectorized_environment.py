@@ -106,12 +106,14 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
         [env.set_state.remote(new_env) for env in self.envs]
 
     def clone(self, partners, clone_mask):
-        # for i, j in enumerate(partners[clone_mask]):
-        #     wrapped_env = self.envs[i]
-        #     new_state = self.envs[j].get_state.remote()
-        #     wrapped_env.set_state(new_state)
-        raise NotImplementedError
+        assert len(clone_mask) == self.n
 
+        for i, do_clone in enumerate(clone_mask):
+            if not do_clone:
+                continue
+            wrapped_env = self.envs[i]
+            new_state = self.envs[partners[i]].get_state.remote()
+            wrapped_env.set_state.remote(new_state)
 
 class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
     def __init__(self, env: Union[str, gym.Env], n: int, joint_model: JointModel):
