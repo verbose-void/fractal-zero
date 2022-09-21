@@ -7,6 +7,7 @@ import torch
 import numpy as np
 
 from fractal_zero.models.joint_model import JointModel
+from fractal_zero.utils import get_space_shape
 
 
 def load_environment(env: Union[str, gym.Env]) -> gym.Env:
@@ -62,8 +63,8 @@ class _RayWrappedEnvironment:
     def reset(self, *args, **kwargs):
         return self._env.reset(*args, **kwargs)
 
-    def step(self, *args, **kwargs):
-        return self._env.step(*args, **kwargs)
+    def step(self, action, *args, **kwargs):
+        return self._env.step(action, *args, **kwargs)
 
 
 class RayVectorizedEnvironment(VectorizedEnvironment):
@@ -97,7 +98,7 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             dones.append(done)
             infos.append(info)
 
-        return observations, rewards, dones, infos
+        return torch.tensor(observations), torch.tensor(rewards), dones, infos
 
     def set_all_states(self, new_env: gym.Env, _):
         # NOTE: don't need to call ray.get here.

@@ -64,13 +64,19 @@ class FMC:
     def prediction_model(self):
         return self.model.prediction_model
 
+    @property
+    def batch_actions(self):
+        if self.config.search_using_actual_environment:
+            return self.raw_actions
+        return self.actions
+
     @torch.no_grad()
     def _perturbate(self):
         """Advance the state of each walker."""
 
         self._assign_actions()
 
-        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(self.actions)
+        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(self.batch_actions)
 
         _, self.predicted_values = self.prediction_model.forward(self.observations)
 
@@ -137,8 +143,8 @@ class FMC:
         """Each walker picks an action to advance it's state."""
 
         # TODO: use the policy function for action selection.
-        actions = self.vectorized_environment.batched_action_space_sample()
-        self.actions = torch.tensor(actions, device=self.config.device).unsqueeze(-1)
+        self.raw_actions = self.vectorized_environment.batched_action_space_sample()
+        self.actions = torch.tensor(self.raw_actions, device=self.config.device).unsqueeze(-1)
 
         if self.root_actions is None:
             self.root_actions = self.actions.cpu().detach().clone()

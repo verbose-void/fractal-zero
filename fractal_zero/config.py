@@ -9,9 +9,10 @@ from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import get_space_shape
 
 
-DEFAULT_DEVICE = (
-    torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-)
+# DEFAULT_DEVICE = (
+#     torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+# )
+DEFAULT_DEVICE = torch.device("cpu")
 
 
 CONSTANT_LR_CONFIG = {
@@ -31,7 +32,7 @@ class FractalZeroConfig:
 
     # when True the lookahead search uses the environment directly (AlphaZero Style).
     # when False, the lookahead search uses a DynamicsModel instead of the environment (MuZero Style).
-    search_using_actual_environment: bool = False
+    search_using_actual_environment: bool = True
 
     max_replay_buffer_size: int = 512
     replay_buffer_pop_strategy: str = "oldest"  # oldest or random
