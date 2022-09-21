@@ -1,6 +1,6 @@
 from abc import ABC
 from copy import deepcopy
-from typing import Union
+from typing import List, Union
 import gym
 import ray
 import torch
@@ -41,6 +41,9 @@ class VectorizedEnvironment(ABC):
     def set_all_states(self, new_env: gym.Env, observation: np.ndarray):
         raise NotImplementedError
 
+    def clone(self, partners, clone_mask):
+        raise NotImplementedError
+
 
 @ray.remote
 class _RayWrappedEnvironment:
@@ -53,6 +56,9 @@ class _RayWrappedEnvironment:
 
         self._env = deepcopy(env)
 
+    def get_state(self) -> gym.Env:
+        return self._env
+
     def reset(self, *args, **kwargs):
         return self._env.reset(*args, **kwargs)
 
@@ -61,6 +67,8 @@ class _RayWrappedEnvironment:
 
 
 class RayVectorizedEnvironment(VectorizedEnvironment):
+    envs: List[_RayWrappedEnvironment]
+
     def __init__(self, env: Union[str, gym.Env], n: int):
         super().__init__(env, n)
 
@@ -94,6 +102,13 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
     def set_all_states(self, new_env: gym.Env, _):
         # NOTE: don't need to call ray.get here.
         [env.set_state.remote(new_env) for env in self.envs]
+
+    def clone(self, partners, clone_mask):
+        # for i, j in enumerate(partners[clone_mask]):
+        #     wrapped_env = self.envs[i]
+        #     new_state = self.envs[j].get_state.remote()
+        #     wrapped_env.set_state(new_state)
+        raise NotImplementedError
 
 
 class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
@@ -144,3 +159,7 @@ class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
         batched_initial_state[:] = state
 
         self.dynamics_model.set_state(batched_initial_state)
+
+    def clone(self, partners, clone_mask):
+        state = self.dynamics_model.state
+        state[clone_mask] = state[partners[clone_mask]]

@@ -59,7 +59,7 @@ class FractalZero(torch.nn.Module):
         obs = self.actual_env.reset()
         game_history = GameHistory(obs)
 
-        self.fmc = FMC(self.config, verbose=False)
+        self.fmc = FMC(self.vectorized_environment, self.config, verbose=False)
 
         for step in range(self.config.max_game_steps):
             obs = torch.tensor(obs, device=self.config.device)

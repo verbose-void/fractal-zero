@@ -31,16 +31,17 @@ class FMC:
     approach, it's natively vectorized so it can be put onto the GPU.
     """
 
-    env_simulator: VectorizedEnvironment
+    vectorized_environment: VectorizedEnvironment
 
     def __init__(
         self,
+        vectorized_environment: VectorizedEnvironment,
         config: FractalZeroConfig,
         verbose: bool = False,
     ):
+        self.vectorized_environment = vectorized_environment
         self.config = config
         self.model = config.joint_model
-
         self.verbose = verbose
 
     @property
@@ -51,13 +52,13 @@ class FMC:
     def device(self):
         return self.model.device
 
-    @property
-    def state(self):
-        return self.dynamics_model.state
+    # @property
+    # def state(self):
+    #     return self.dynamics_model.state
 
-    @property
-    def dynamics_model(self):
-        return self.model.dynamics_model
+    # @property
+    # def dynamics_model(self):
+    #     return self.model.dynamics_model
 
     @property
     def prediction_model(self):
@@ -68,8 +69,10 @@ class FMC:
         """Advance the state of each walker."""
 
         self._assign_actions()
-        self.rewards = self.dynamics_model.forward(self.actions)
-        _, self.predicted_values = self.prediction_model.forward(self.state)
+
+        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(self.actions)
+
+        _, self.predicted_values = self.prediction_model.forward(self.observations)
 
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
@@ -109,12 +112,6 @@ class FMC:
             self._backpropagate_reward_buffer()
             self._execute_cloning()
 
-        # sanity check
-        assert self.state.shape == (
-            self.num_walkers,
-            self.dynamics_model.embedding_size,
-        )
-
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
 
         self.log(
@@ -140,10 +137,7 @@ class FMC:
         """Each walker picks an action to advance it's state."""
 
         # TODO: use the policy function for action selection.
-        actions = []
-        for _ in range(self.num_walkers):
-            action = self.dynamics_model.action_space.sample()
-            actions.append(action)
+        actions = self.vectorized_environment.batched_action_space_sample()
         self.actions = torch.tensor(actions, device=self.config.device).unsqueeze(-1)
 
         if self.root_actions is None:
@@ -161,7 +155,7 @@ class FMC:
         """For the cloning phase, we calculate the distances between each walker and their partner for balancing exploration."""
 
         self.distances = torch.linalg.norm(
-            self.state - self.state[self.clone_partners], dim=1
+            self.observations - self.observations[self.clone_partners], dim=1
         )
 
     @torch.no_grad()
@@ -247,19 +241,13 @@ class FMC:
         """
 
         # TODO: don't clone best walker (?)
-        if self.verbose:
-            print()
-            print()
-            print("clone stats:")
-            print("state order", self.clone_partners)
-            print("distances", self.distances)
-            print("virtual rewards", self.virtual_rewards)
-            print("clone probabilities", self.clone_probabilities)
-            print("clone mask", self.clone_mask)
-            print("state before", self.state)
-
         # execute clones
-        self._clone_vector(self.state)
+        # self._clone_vector(self.state)
+        self.vectorized_environment.clone(self.clone_partners, self.clone_mask)
+
+        self._clone_vector(self.observations)
+        self._clone_vector(self.rewards)
+
         self._clone_vector(self.actions)
         self._clone_vector(self.root_actions)
         self._clone_vector(self.reward_buffer)
