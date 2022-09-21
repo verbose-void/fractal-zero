@@ -17,7 +17,7 @@ from fractal_zero.utils import mean_min_max_dict
 
 
 def get_cartpole_joint_model(env: gym.Env) -> JointModel:
-    embedding_size = 16
+    embedding_size = 4
     out_features = 1
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)

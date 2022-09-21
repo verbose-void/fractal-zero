@@ -98,7 +98,8 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             dones.append(done)
             infos.append(info)
 
-        return torch.tensor(observations), torch.tensor(rewards), dones, infos
+        # TODO: these shapes and such should be cleaner to understand and more standardized throughout the code.
+        return torch.tensor(observations), torch.tensor(rewards).unsqueeze(-1), dones, infos
 
     def set_all_states(self, new_env: gym.Env, _):
         # NOTE: don't need to call ray.get here.
