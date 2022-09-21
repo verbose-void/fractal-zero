@@ -177,9 +177,17 @@ class FMC:
 
         # TODO EXPERIMENT: should we be using the value estimates? or should we be using the value buffer?
         # or should we be using the cumulative rewards? (the original FMC authors use cumulative rewards)
-        rel_values = _relativize_vector(self.predicted_values).squeeze(-1).cpu()
+        clone_strat = self.config.fmc_clone_strategy
+        if clone_strat == "predicted_values":
+            exploit = self.predicted_values
+        elif clone_strat == "cumulative_reward":
+            # TODO cache this...
+            cumulative_rewards = self.reward_buffer[:, :self.simulation_iteration].sum(dim=1)
+            exploit = cumulative_rewards
+
+        rel_exploits = _relativize_vector(exploit).squeeze(-1).cpu()
         rel_distances = _relativize_vector(self.distances).cpu()
-        self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
+        self.virtual_rewards = (rel_exploits**self.config.balance) * rel_distances
 
         self.log(
             {

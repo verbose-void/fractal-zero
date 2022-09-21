@@ -57,6 +57,7 @@ class FractalZeroConfig:
     lookahead_steps: int = 64
     evaluation_lookahead_steps: int = 64
     fmc_backprop_strategy: str = "all"  # all, clone_mask, or clone_participants
+    fmc_clone_strategy: str = "cumulative_reward"  # predicted_values or cumulative_reward
 
     device: torch.device = DEFAULT_DEVICE
 
