@@ -25,10 +25,6 @@ def _relativize_vector(vector):
     return standard
 
 
-def _build_default_config(vectorized_environment: VectorizedEnvironment):
-    pass
-
-
 class FMC:
     """Fractal Monte Carlo is a collaborative cellular automata based tree search algorithm. This version is special, because instead of having a gym
     environment maintain the state for each walker during the search process, each walker's state is represented inside of a batched hidden
