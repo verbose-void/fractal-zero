@@ -9,6 +9,8 @@ from fractal_zero.vectorized_environment import (
     load_environment,
 )
 
+import gym
+
 
 def build_test_joint_model(env, embedding_size: int = 8) -> JointModel:
     env = load_environment(env)
@@ -30,15 +32,21 @@ def _test_step(vec_env: VectorizedEnvironment):
 
 def test_vectorized_cartpole_ray():
     n = 2
+    env_id = "CartPole-v0"
 
-    vec_env = RayVectorizedEnvironment("CartPole-v0", n=n)
+    vec_env = RayVectorizedEnvironment(env_id, n=n)
 
     initial_observations = vec_env.batch_reset()
     assert len(initial_observations) == n
 
-    # TODO: test set all states
-
     _test_step(vec_env)
+
+    # test setting states
+    new_env = gym.make(env_id)
+    new_env.reset()
+    for _ in range(5):
+        obs, rew, done, info = new_env.step(new_env.action_space.sample())
+    vec_env.set_all_states(new_env, obs)
 
 
 def test_vectorized_cartpole_dynamics_model():
