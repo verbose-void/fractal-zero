@@ -16,7 +16,7 @@ from tqdm import tqdm
 from fractal_zero.utils import mean_min_max_dict
 
 
-def get_cartpole_joint_model(env: gym.Env, embedding_size: int=16) -> JointModel:
+def get_cartpole_joint_model(env: gym.Env, embedding_size: int = 16) -> JointModel:
     out_features = 1
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
@@ -40,7 +40,7 @@ def get_cartpole_config(env: gym.Env, alphazero_style: bool) -> FractalZeroConfi
         num_walkers=16,
         balance=1.0,
         search_using_actual_environment=alphazero_style,
-        use_wandb=wandb_config is not None
+        use_wandb=wandb_config is not None,
     )
 
     return FractalZeroConfig(

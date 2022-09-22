@@ -99,7 +99,12 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             infos.append(info)
 
         # TODO: these shapes and such should be cleaner to understand and more standardized throughout the code.
-        return torch.tensor(observations), torch.tensor(rewards).unsqueeze(-1), dones, infos
+        return (
+            torch.tensor(observations),
+            torch.tensor(rewards).unsqueeze(-1),
+            dones,
+            infos,
+        )
 
     def set_all_states(self, new_env: gym.Env, _):
         # NOTE: don't need to call ray.get here.
@@ -115,10 +120,11 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             new_state = self.envs[partners[i]].get_state.remote()
             wrapped_env.set_state.remote(new_state)
 
+
 class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
     def __init__(self, env: Union[str, gym.Env], n: int, joint_model: JointModel):
         super().__init__(env, n)
-        
+
         self._env = env
 
         if not isinstance(joint_model, JointModel):
@@ -161,9 +167,7 @@ class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
 
         state = self.representation_model.forward(obs)
 
-        batched_initial_state = torch.zeros(
-            (self.n, *state.shape), device=device
-        )
+        batched_initial_state = torch.zeros((self.n, *state.shape), device=device)
         batched_initial_state[:] = state
 
         self.dynamics_model.set_state(batched_initial_state)

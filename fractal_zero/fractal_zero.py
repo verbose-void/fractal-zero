@@ -5,7 +5,10 @@ from fractal_zero.config import FractalZeroConfig
 
 from fractal_zero.data.replay_buffer import GameHistory
 from fractal_zero.search.fmc import FMC
-from fractal_zero.vectorized_environment import RayVectorizedEnvironment, VectorizedDynamicsModelEnvironment
+from fractal_zero.vectorized_environment import (
+    RayVectorizedEnvironment,
+    VectorizedDynamicsModelEnvironment,
+)
 
 
 class FractalZero(torch.nn.Module):
@@ -24,7 +27,7 @@ class FractalZero(torch.nn.Module):
         # TODO: explain
         if self.fmc_config.search_using_actual_environment:
             self.vectorized_environment = RayVectorizedEnvironment(
-                self.actual_env, 
+                self.actual_env,
                 n=self.fmc_config.num_walkers,
             )
         else:
@@ -62,7 +65,11 @@ class FractalZero(torch.nn.Module):
         obs = self.actual_env.reset()
         game_history = GameHistory(obs)
 
-        self.fmc = FMC(self.vectorized_environment, self.model.prediction_model, config=self.fmc_config)
+        self.fmc = FMC(
+            self.vectorized_environment,
+            self.model.prediction_model,
+            config=self.fmc_config,
+        )
 
         for step in range(self.config.max_game_steps):
             obs = torch.tensor(obs, device=self.config.device)
@@ -76,7 +83,7 @@ class FractalZero(torch.nn.Module):
                 print(f"step={step}")
                 print(f"reward={reward}, done={done}, info={info}")
                 print(
-                    f"action={action}, root_value={root_value}" #, value_estimate={value_estimate}"
+                    f"action={action}, root_value={root_value}"  # , value_estimate={value_estimate}"
                 )
                 self.actual_env.render()
                 sleep(0.1)

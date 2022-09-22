@@ -2,7 +2,10 @@ import gym
 
 from fractal_zero.config import FMCConfig
 from fractal_zero.search.fmc import FMC
-from fractal_zero.vectorized_environment import RayVectorizedEnvironment, VectorizedDynamicsModelEnvironment
+from fractal_zero.vectorized_environment import (
+    RayVectorizedEnvironment,
+    VectorizedDynamicsModelEnvironment,
+)
 
 from fractal_zero.tests.test_vectorized_environment import build_test_joint_model
 
@@ -31,6 +34,7 @@ def test_cartpole_actual_environment():
 
     assert root_value > 5
 
+
 def test_cartpole_actual_environment_no_value_function():
     env = gym.make("CartPole-v0")
 
@@ -40,7 +44,9 @@ def test_cartpole_actual_environment_no_value_function():
     # no config, no model
     fmc = FMC(vec_env)
 
-    assert fmc.config.clone_strategy != "predicted_values", "Cannot use predicted values to clone when no value function exists."
+    assert (
+        fmc.config.clone_strategy != "predicted_values"
+    ), "Cannot use predicted values to clone when no value function exists."
 
     fmc.simulate(16)
     root_value = fmc.root_value

@@ -8,7 +8,10 @@ from fractal_zero.config import FMCConfig, FractalZeroConfig
 
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import mean_min_max_dict
-from fractal_zero.vectorized_environment import VectorizedDynamicsModelEnvironment, VectorizedEnvironment
+from fractal_zero.vectorized_environment import (
+    VectorizedDynamicsModelEnvironment,
+    VectorizedEnvironment,
+)
 
 
 @torch.no_grad()
@@ -41,8 +44,8 @@ class FMC:
     def __init__(
         self,
         vectorized_environment: VectorizedEnvironment,
-        prediction_model: torch.nn.Module=None,
-        config: FMCConfig=None,
+        prediction_model: torch.nn.Module = None,
+        config: FMCConfig = None,
         verbose: bool = False,
     ):
         self.vectorized_environment = vectorized_environment
@@ -56,20 +59,28 @@ class FMC:
         self._validate_config()
 
     def _build_default_config(self) -> FMCConfig:
-        use_actual_env = not isinstance(self.vectorized_environment, VectorizedDynamicsModelEnvironment)
+        use_actual_env = not isinstance(
+            self.vectorized_environment, VectorizedDynamicsModelEnvironment
+        )
 
         return FMCConfig(
             num_walkers=self.vectorized_environment.n,
             search_using_actual_environment=use_actual_env,
-            clone_strategy="predicted_values" if self.model is not None else "cumulative_reward"
+            clone_strategy="predicted_values"
+            if self.model is not None
+            else "cumulative_reward",
         )
 
     def _validate_config(self):
         if self.config.num_walkers != self.vectorized_environment.n:
-            raise ValueError(f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match.")
+            raise ValueError(
+                f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
+            )
 
         if self.model is None and self.config.clone_strategy == "predicted_values":
-            raise ValueError("Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model.")
+            raise ValueError(
+                "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
+            )
 
     @property
     def num_walkers(self) -> int:
@@ -91,7 +102,9 @@ class FMC:
 
         self._assign_actions()
 
-        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(self.batch_actions)
+        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(
+            self.batch_actions
+        )
 
         if self.model is not None:
             _, self.predicted_values = self.model.forward(self.observations)
@@ -198,7 +211,9 @@ class FMC:
             exploit = self.predicted_values
         elif clone_strat == "cumulative_reward":
             # TODO cache this...
-            cumulative_rewards = self.reward_buffer[:, :self.simulation_iteration].sum(dim=1)
+            cumulative_rewards = self.reward_buffer[:, : self.simulation_iteration].sum(
+                dim=1
+            )
             exploit = cumulative_rewards
 
         rel_exploits = _relativize_vector(exploit).squeeze(-1).cpu()
@@ -363,7 +378,9 @@ class FMC:
             return
 
         if wandb.run is None:
-            warn("Weights and biases config was provided, but wandb.init was not called.")
+            warn(
+                "Weights and biases config was provided, but wandb.init was not called."
+            )
             return
 
         wandb.log(*args, **kwargs)
