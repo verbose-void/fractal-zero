@@ -27,14 +27,18 @@ def get_cartpole_joint_model(env: gym.Env, embedding_size: int = 16) -> JointMod
     return JointModel(representation_model, dynamics_model, prediction_model)
 
 
-def get_cartpole_config(env: gym.Env, alphazero_style: bool) -> FractalZeroConfig:
+def get_cartpole_config(
+    env: gym.Env, alphazero_style: bool, use_wandb: bool
+) -> FractalZeroConfig:
     if alphazero_style:
         joint_model = get_cartpole_joint_model(env, embedding_size=4)
     else:
         joint_model = get_cartpole_joint_model(env, embedding_size=16)
 
-    wandb_config = None
-    # wandb_config = {"project": "fractal_zero_cartpole"}
+    if use_wandb:
+        wandb_config = {"project": "fractal_zero_cartpole"}
+    else:
+        wandb_config = None
 
     fmc_config = FMCConfig(
         num_walkers=16,
@@ -62,9 +66,9 @@ def get_cartpole_config(env: gym.Env, alphazero_style: bool) -> FractalZeroConfi
     )
 
 
-def train_cartpole(alphazero_style: bool):
+def train_cartpole(alphazero_style: bool, use_wandb: bool):
     env = gym.make("CartPole-v0")
-    config = get_cartpole_config(env, alphazero_style)
+    config = get_cartpole_config(env, alphazero_style, use_wandb)
 
     # TODO: move into config?
     train_every = 1
@@ -125,4 +129,5 @@ def train_cartpole(alphazero_style: bool):
 
 if __name__ == "__main__":
     alphazero_style = False
-    train_cartpole(alphazero_style)
+    use_wandb = False
+    train_cartpole(alphazero_style, use_wandb)
