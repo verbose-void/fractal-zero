@@ -118,6 +118,8 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
 class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
     def __init__(self, env: Union[str, gym.Env], n: int, joint_model: JointModel):
         super().__init__(env, n)
+        
+        self._env = env
 
         if not isinstance(joint_model, JointModel):
             raise ValueError(f"Expected JointModel, got {type(joint_model)}")
@@ -133,7 +135,9 @@ class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
         return self.joint_model.representation_model
 
     def batch_reset(self, *args, **kwargs):
-        raise NotImplementedError
+        obs = self._env.reset(*args, **kwargs)
+        self.set_all_states(self._env, obs)
+        return obs
 
     def batch_step(self, actions, *args, **kwargs):
         device = self.joint_model.device
