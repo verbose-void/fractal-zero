@@ -1,6 +1,6 @@
 import gym
 
-from fractal_zero.config import FractalZeroConfig
+from fractal_zero.config import FMCConfig, FractalZeroConfig
 from fractal_zero.data.data_handler import DataHandler
 from fractal_zero.fractal_zero import FractalZero
 
@@ -33,10 +33,20 @@ def get_cartpole_config(env: gym.Env, alphazero_style: bool) -> FractalZeroConfi
     else:
         joint_model = get_cartpole_joint_model(env, embedding_size=16)
 
+    wandb_config = None
+    # wandb_config = {"project": "fractal_zero_cartpole"}
+
+    fmc_config = FMCConfig(
+        num_walkers=16,
+        balance=1.0,
+        search_using_actual_environment=alphazero_style,
+        use_wandb=wandb_config is not None
+    )
+
     return FractalZeroConfig(
         env,
         joint_model,
-        search_using_actual_environment=alphazero_style,
+        fmc_config=fmc_config,
         max_replay_buffer_size=64,
         num_games=1_024,
         max_game_steps=200,
@@ -46,11 +56,9 @@ def get_cartpole_config(env: gym.Env, alphazero_style: bool) -> FractalZeroConfi
         optimizer="SGD",
         weight_decay=1e-4,
         momentum=0.9,  # only if optimizer is SGD
-        num_walkers=16,
-        balance=1.0,
         lookahead_steps=8,
         evaluation_lookahead_steps=8,
-        wandb_config={"project": "fractal_zero_cartpole"},
+        wandb_config=wandb_config,
     )
 
 

@@ -22,17 +22,21 @@ class FractalZero(torch.nn.Module):
         self.actual_env = self.config.env
 
         # TODO: explain
-        if self.config.search_using_actual_environment:
+        if self.fmc_config.search_using_actual_environment:
             self.vectorized_environment = RayVectorizedEnvironment(
                 self.actual_env, 
-                n=self.config.num_walkers,
+                n=self.fmc_config.num_walkers,
             )
         else:
             self.vectorized_environment = VectorizedDynamicsModelEnvironment(
                 self.actual_env,
-                n=self.config.num_walkers,
+                n=self.fmc_config.num_walkers,
                 joint_model=self.model,
             )
+
+    @property
+    def fmc_config(self):
+        return self.config.fmc_config
 
     def forward(self, observation):
         # TODO: docstring, note that lookahead_steps == 0 means there won't be a tree search
@@ -55,11 +59,10 @@ class FractalZero(torch.nn.Module):
         self,
         render: bool = False,
     ):
-
         obs = self.actual_env.reset()
         game_history = GameHistory(obs)
 
-        self.fmc = FMC(self.vectorized_environment, self.config, verbose=False)
+        self.fmc = FMC(self.vectorized_environment, self.model.prediction_model, config=self.fmc_config)
 
         for step in range(self.config.max_game_steps):
             obs = torch.tensor(obs, device=self.config.device)
