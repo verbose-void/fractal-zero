@@ -1,15 +1,17 @@
-from logging import warn
+from warnings import warn
 import torch
 import numpy as np
-import networkx as nx
 
 import wandb
 
-import matplotlib.pyplot as plt
-from fractal_zero.config import FractalZeroConfig
+from fractal_zero.config import FMCConfig, FractalZeroConfig
 
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import mean_min_max_dict
+from fractal_zero.vectorized_environment import (
+    VectorizedDynamicsModelEnvironment,
+    VectorizedEnvironment,
+)
 
 
 @torch.no_grad()
@@ -33,24 +35,48 @@ class FMC:
     approach, it's natively vectorized so it can be put onto the GPU.
     """
 
+    vectorized_environment: VectorizedEnvironment
+
     def __init__(
         self,
-        config: FractalZeroConfig,
+        vectorized_environment: VectorizedEnvironment,
+        prediction_model: torch.nn.Module = None,
+        config: FMCConfig = None,
         verbose: bool = False,
     ):
-        self.config = config
-
-        self.model = config.joint_model
-
+        self.vectorized_environment = vectorized_environment
+        self.model = prediction_model
         self.verbose = verbose
 
-    def set_state(self, state: torch.Tensor):
-        # set the initial states for all walkers
-        batched_initial_state = torch.zeros(
-            (self.num_walkers, *state.shape), device=self.config.device
+        if config is None:
+            self.config = self._build_default_config()
+        else:
+            self.config = config
+        self._validate_config()
+
+    def _build_default_config(self) -> FMCConfig:
+        use_actual_env = not isinstance(
+            self.vectorized_environment, VectorizedDynamicsModelEnvironment
         )
-        batched_initial_state[:] = state
-        self.dynamics_model.set_state(batched_initial_state)
+
+        return FMCConfig(
+            num_walkers=self.vectorized_environment.n,
+            search_using_actual_environment=use_actual_env,
+            clone_strategy="predicted_values"
+            if self.model is not None
+            else "cumulative_reward",
+        )
+
+    def _validate_config(self):
+        if self.config.num_walkers != self.vectorized_environment.n:
+            raise ValueError(
+                f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
+            )
+
+        if self.model is None and self.config.clone_strategy == "predicted_values":
+            raise ValueError(
+                "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
+            )
 
     @property
     def num_walkers(self) -> int:
@@ -58,27 +84,26 @@ class FMC:
 
     @property
     def device(self):
-        return self.model.device
+        return self.config.device
 
     @property
-    def state(self):
-        return self.dynamics_model.state
-
-    @property
-    def dynamics_model(self):
-        return self.model.dynamics_model
-
-    @property
-    def prediction_model(self):
-        return self.model.prediction_model
+    def batch_actions(self):
+        if self.config.search_using_actual_environment:
+            return self.raw_actions
+        return self.actions
 
     @torch.no_grad()
     def _perturbate(self):
         """Advance the state of each walker."""
 
         self._assign_actions()
-        self.rewards = self.dynamics_model.forward(self.actions)
-        _, self.predicted_values = self.prediction_model.forward(self.state)
+
+        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(
+            self.batch_actions
+        )
+
+        if self.model is not None:
+            _, self.predicted_values = self.model.forward(self.observations)
 
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
@@ -118,12 +143,6 @@ class FMC:
             self._backpropagate_reward_buffer()
             self._execute_cloning()
 
-        # sanity check
-        assert self.state.shape == (
-            self.num_walkers,
-            self.dynamics_model.embedding_size,
-        )
-
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
 
         self.log(
@@ -149,11 +168,8 @@ class FMC:
         """Each walker picks an action to advance it's state."""
 
         # TODO: use the policy function for action selection.
-        actions = []
-        for _ in range(self.num_walkers):
-            action = self.dynamics_model.action_space.sample()
-            actions.append(action)
-        self.actions = torch.tensor(actions, device=self.config.device).unsqueeze(-1)
+        self.raw_actions = self.vectorized_environment.batched_action_space_sample()
+        self.actions = torch.tensor(self.raw_actions, device=self.device).unsqueeze(-1)
 
         if self.root_actions is None:
             self.root_actions = self.actions.cpu().detach().clone()
@@ -170,7 +186,7 @@ class FMC:
         """For the cloning phase, we calculate the distances between each walker and their partner for balancing exploration."""
 
         self.distances = torch.linalg.norm(
-            self.state - self.state[self.clone_partners], dim=1
+            self.observations - self.observations[self.clone_partners], dim=1
         )
 
     @torch.no_grad()
@@ -186,14 +202,24 @@ class FMC:
 
         # TODO EXPERIMENT: should we be using the value estimates? or should we be using the value buffer?
         # or should we be using the cumulative rewards? (the original FMC authors use cumulative rewards)
-        rel_values = _relativize_vector(self.predicted_values).squeeze(-1).cpu()
+        clone_strat = self.config.clone_strategy
+        if clone_strat == "predicted_values":
+            exploit = self.predicted_values
+        elif clone_strat == "cumulative_reward":
+            # TODO cache this...
+            cumulative_rewards = self.reward_buffer[:, : self.simulation_iteration].sum(
+                dim=1
+            )
+            exploit = cumulative_rewards
+
+        rel_exploits = _relativize_vector(exploit).squeeze(-1).cpu()
         rel_distances = _relativize_vector(self.distances).cpu()
-        self.virtual_rewards = (rel_values**self.config.balance) * rel_distances
+        self.virtual_rewards = (rel_exploits**self.config.balance) * rel_distances
 
         self.log(
             {
                 **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
-                **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
+                # **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
                 **mean_min_max_dict("fmc/distances", self.distances),
                 **mean_min_max_dict("fmc/auxiliaries", self.rewards),
             },
@@ -256,19 +282,13 @@ class FMC:
         """
 
         # TODO: don't clone best walker (?)
-        if self.verbose:
-            print()
-            print()
-            print("clone stats:")
-            print("state order", self.clone_partners)
-            print("distances", self.distances)
-            print("virtual rewards", self.virtual_rewards)
-            print("clone probabilities", self.clone_probabilities)
-            print("clone mask", self.clone_mask)
-            print("state before", self.state)
-
         # execute clones
-        self._clone_vector(self.state)
+        # self._clone_vector(self.state)
+        self.vectorized_environment.clone(self.clone_partners, self.clone_mask)
+
+        self._clone_vector(self.observations)
+        self._clone_vector(self.rewards)
+
         self._clone_vector(self.actions)
         self._clone_vector(self.root_actions)
         self._clone_vector(self.reward_buffer)
@@ -287,7 +307,7 @@ class FMC:
         # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
         force_backpropagate_all = self.simulation_iteration == self.k - 1
 
-        strat = self.config.fmc_backprop_strategy
+        strat = self.config.backprop_strategy
         if strat == "all" or force_backpropagate_all:
             mask = torch.ones_like(self.clone_mask)
         elif strat == "clone_mask":
@@ -348,11 +368,15 @@ class FMC:
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
 
     def log(self, *args, **kwargs):
-        if self.config.wandb_config is None:
+        # TODO: separate logger class
+
+        if not self.config.use_wandb:
             return
 
         if wandb.run is None:
-            # warn("Weights and biases config was provided, but wandb.init was not called.")
+            warn(
+                "Weights and biases config was provided, but wandb.init was not called."
+            )
             return
 
         wandb.log(*args, **kwargs)

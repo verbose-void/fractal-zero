@@ -9,9 +9,10 @@ from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import get_space_shape
 
 
-DEFAULT_DEVICE = (
-    torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-)
+# DEFAULT_DEVICE = (
+#     torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+# )
+DEFAULT_DEVICE = torch.device("cpu")
 
 
 CONSTANT_LR_CONFIG = {
@@ -23,11 +24,33 @@ CONSTANT_LR_CONFIG = {
 
 
 @dataclass
+class FMCConfig:
+    gamma: float = 0.99
+    num_walkers: int = 8
+    balance: float = 1
+
+    # when True the lookahead search uses the environment directly (AlphaZero Style).
+    # when False, the lookahead search uses a DynamicsModel instead of the environment (MuZero Style).
+    search_using_actual_environment: bool = True
+
+    backprop_strategy: str = "all"  # all, clone_mask, or clone_participants
+    clone_strategy: str = "predicted_values"  # predicted_values or cumulative_reward
+
+    use_wandb: bool = False
+
+    device = DEFAULT_DEVICE
+
+
+@dataclass
 class FractalZeroConfig:
     # TODO: break config into multiple parts (FMC, Trainer, etc.)
 
     env: gym.Env
+
+    # TODO: if using AlphaZero style, autodetermine the embedding size.
     joint_model: JointModel
+
+    fmc_config: FMCConfig = None
 
     max_replay_buffer_size: int = 512
     replay_buffer_pop_strategy: str = "oldest"  # oldest or random
@@ -36,7 +59,6 @@ class FractalZeroConfig:
 
     max_batch_size: int = 128
     dynamic_batch_size: bool = True
-    gamma: float = 0.99
     unroll_steps: int = 16
     minimize_batch_padding: bool = True
     learning_rate: float = 0.001
@@ -45,11 +67,8 @@ class FractalZeroConfig:
     momentum: float = 0.9  # only if optimizer is SGD
     optimizer: str = "SGD"
 
-    num_walkers: int = 64
-    balance: float = 1
     lookahead_steps: int = 64
     evaluation_lookahead_steps: int = 64
-    fmc_backprop_strategy: str = "all"  # all, clone_mask, or clone_participants
 
     device: torch.device = DEFAULT_DEVICE
 

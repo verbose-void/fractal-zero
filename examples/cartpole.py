@@ -1,6 +1,6 @@
 import gym
 
-from fractal_zero.config import FractalZeroConfig
+from fractal_zero.config import FMCConfig, FractalZeroConfig
 from fractal_zero.data.data_handler import DataHandler
 from fractal_zero.fractal_zero import FractalZero
 
@@ -16,8 +16,7 @@ from tqdm import tqdm
 from fractal_zero.utils import mean_min_max_dict
 
 
-def get_cartpole_joint_model(env: gym.Env) -> JointModel:
-    embedding_size = 16
+def get_cartpole_joint_model(env: gym.Env, embedding_size: int = 16) -> JointModel:
     out_features = 1
 
     representation_model = FullyConnectedRepresentationModel(env, embedding_size)
@@ -28,32 +27,48 @@ def get_cartpole_joint_model(env: gym.Env) -> JointModel:
     return JointModel(representation_model, dynamics_model, prediction_model)
 
 
-def get_cartpole_config(env: gym.Env) -> FractalZeroConfig:
-    joint_model = get_cartpole_joint_model(env)
+def get_cartpole_config(
+    env: gym.Env, alphazero_style: bool, use_wandb: bool
+) -> FractalZeroConfig:
+    if alphazero_style:
+        joint_model = get_cartpole_joint_model(env, embedding_size=4)
+    else:
+        joint_model = get_cartpole_joint_model(env, embedding_size=16)
+
+    if use_wandb:
+        wandb_config = {"project": "fractal_zero_cartpole"}
+    else:
+        wandb_config = None
+
+    fmc_config = FMCConfig(
+        num_walkers=16,
+        balance=1.0,
+        search_using_actual_environment=alphazero_style,
+        use_wandb=wandb_config is not None,
+    )
 
     return FractalZeroConfig(
         env,
         joint_model,
-        max_replay_buffer_size=512,
-        num_games=5_000,
+        fmc_config=fmc_config,
+        max_replay_buffer_size=64,
+        num_games=1_024,
         max_game_steps=200,
-        max_batch_size=128,
-        unroll_steps=16,
+        max_batch_size=16,
+        unroll_steps=8,
         learning_rate=0.003,
         optimizer="SGD",
         weight_decay=1e-4,
         momentum=0.9,  # only if optimizer is SGD
-        num_walkers=64,
-        balance=1.0,
-        lookahead_steps=64,
-        evaluation_lookahead_steps=64,
-        wandb_config={"project": "fractal_zero_cartpole"},
+        lookahead_steps=8,
+        evaluation_lookahead_steps=8,
+        wandb_config=wandb_config,
     )
 
 
-def train_cartpole():
+def train_cartpole(alphazero_style: bool, use_wandb: bool):
     env = gym.make("CartPole-v0")
-    config = get_cartpole_config(env)
+    config = get_cartpole_config(env, alphazero_style, use_wandb)
 
     # TODO: move into config?
     train_every = 1
@@ -113,4 +128,6 @@ def train_cartpole():
 
 
 if __name__ == "__main__":
-    train_cartpole()
+    alphazero_style = False
+    use_wandb = False
+    train_cartpole(alphazero_style, use_wandb)

@@ -19,6 +19,9 @@ class JointModel(torch.nn.Module):
         self.dynamics_model = dynamics_model
         self.prediction_model = prediction_model
 
+        # default on CPU
+        self.to(torch.device("cpu"))
+
     def to(self, device):
         self.device = device
         self.representation_model = self.representation_model.to(device)
