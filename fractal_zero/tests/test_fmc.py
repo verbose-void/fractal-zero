@@ -74,3 +74,18 @@ def test_cartpole_dynamics_function():
     root_value = fmc.root_value
 
     print(action, root_value)
+
+
+def test_cartpole_solution():
+    env = gym.make("CartPole-v0")
+    vec_env = RayVectorizedEnvironment(env, n=NUM_WALKERS)
+    vec_env.batch_reset()
+
+    # no walkers will die from this, and the cumulative rewards should be exact.
+    fmc = FMC(vec_env)
+    fmc.simulate(8, use_tqdm=True)
+    cumulative_rewards = fmc.reward_buffer.sum(dim=1)
+    assert cumulative_rewards.shape == (NUM_WALKERS, 1)
+    assert fmc.reward_buffer.sum() == NUM_WALKERS * 8
+
+    print(fmc.root_value)
