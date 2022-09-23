@@ -330,11 +330,10 @@ class FMC:
         mask = self._get_backprop_mask()
 
         current_value_buffer = torch.zeros_like(self.value_sum_buffer)
-        for i in reversed(range(self.simulation_iteration)):
-            current_value_buffer[mask] = (
-                self.reward_buffer[mask, i]
-                + current_value_buffer[mask] * self.config.gamma
-            )
+        for i in reversed(range(self.simulation_iteration + 1)):
+            step_rewards = self.reward_buffer[mask, i]
+            discounted_values = current_value_buffer[mask] * self.config.gamma
+            current_value_buffer[mask] = step_rewards + discounted_values
 
         self.value_sum_buffer += current_value_buffer
         self.visit_buffer += mask.unsqueeze(-1)
