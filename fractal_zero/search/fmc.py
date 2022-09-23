@@ -1,6 +1,7 @@
 from warnings import warn
 import torch
 import numpy as np
+from tqdm import tqdm
 
 import wandb
 
@@ -98,7 +99,7 @@ class FMC:
 
         self._assign_actions()
 
-        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(
+        self.observations, self.rewards, self.dones, _ = self.vectorized_environment.batch_step(
             self.batch_actions
         )
 
@@ -108,7 +109,7 @@ class FMC:
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
     @torch.no_grad()
-    def simulate(self, k: int, greedy_action: bool = True):
+    def simulate(self, k: int, greedy_action: bool = True, use_tqdm: bool = False):
         """Run FMC for k iterations, returning the best action that was taken at the root/initial state."""
 
         self.k = k
@@ -137,7 +138,8 @@ class FMC:
         self.root_value_sum = 0
         self.root_visits = 0
 
-        for self.simulation_iteration in range(self.k):
+        it = tqdm(range(self.k), desc="Simulating with FMC", total=self.k, disable=not use_tqdm)
+        for self.simulation_iteration in it:
             self._perturbate()
             self._prepare_clone_variables()
             self._backpropagate_reward_buffer()
