@@ -77,21 +77,49 @@ def test_cartpole_dynamics_function():
     print(action, root_value)
 
 
-def test_cartpole_solution():
+def test_cartpole_exact_reward_and_values():
     env = gym.make("CartPole-v0")
     vec_env = RayVectorizedEnvironment(env, n=NUM_WALKERS)
     vec_env.batch_reset()
 
-    # no walkers will die from this, and the cumulative rewards should be exact.
     config = FMCConfig(gamma=1, num_walkers=NUM_WALKERS, clone_strategy="cumulative_reward")
     fmc = FMC(vec_env, config=config)
+
+    # no walkers will die from this, and the cumulative rewards/value estimation should be exact.
     fmc.simulate(8, use_tqdm=True)
     cumulative_rewards = fmc.reward_buffer.sum(dim=1)
     assert cumulative_rewards.shape == (NUM_WALKERS, 1)
     assert fmc.reward_buffer.sum() == NUM_WALKERS * 8
-    # print(fmc.root_value_sum, fmc.root_visits)
-    print(fmc.value_sum_buffer, fmc.visit_buffer)
     np.testing.assert_almost_equal(fmc.root_value, 8)
-    print(fmc.root_value)
 
-    fmc = FMC(vec_env)
+
+def test_cartpole_consistently_high_reward():
+    n = 64
+
+    env = gym.make("CartPole-v0")
+    vec_env = RayVectorizedEnvironment(env, n=n)
+
+    config = FMCConfig(gamma=1, num_walkers=n, clone_strategy="cumulative_reward")
+    fmc = FMC(vec_env, config=config)
+
+    max_rewards = []
+    root_values = []
+
+    num_trials = 8
+    for _ in range(num_trials):
+        vec_env.batch_reset()
+        fmc.reset()
+
+        # 200 is the max reward accumulate-able in cartpole.
+        fmc.simulate(200, use_tqdm=True)
+
+        max_reward = fmc.reward_buffer.sum(dim=1).max()
+        max_rewards.append(max_reward)
+        root_values.append(fmc.root_value)
+
+    # somewhat lenient constraints
+    # NOTE: random max rewards average is usually <<50.
+    print(max_rewards)
+    print(root_values)
+    assert np.mean(max_rewards) > 120
+    assert np.mean(root_values) > 100

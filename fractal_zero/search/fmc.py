@@ -55,6 +55,25 @@ class FMC:
             self.config = config
         self._validate_config()
 
+        self.reset()
+
+    def reset(self):
+        # TODO: explain all these variables
+        # NOTE: they should exist on the CPU.
+        self.value_sum_buffer = torch.zeros(
+            size=(self.num_walkers, 1),
+            dtype=float,
+        )
+        self.visit_buffer = torch.zeros(
+            size=(self.num_walkers, 1),
+            dtype=int,
+        )
+        self.clone_receives = torch.zeros(
+            size=(self.num_walkers, 1),
+            dtype=int,
+        )
+        self.root_actions = None
+
     def _build_default_config(self) -> FMCConfig:
         use_actual_env = not isinstance(
             self.vectorized_environment, VectorizedDynamicsModelEnvironment
@@ -115,26 +134,11 @@ class FMC:
         self.k = k
         assert self.k > 0
 
-        # TODO: explain all these variables
-        # NOTE: they should exist on the CPU.
+        # NOTE: can't exist in reset.
         self.reward_buffer = torch.zeros(
             size=(self.num_walkers, self.k, 1),
             dtype=float,
         )
-        self.value_sum_buffer = torch.zeros(
-            size=(self.num_walkers, 1),
-            dtype=float,
-        )
-        self.visit_buffer = torch.zeros(
-            size=(self.num_walkers, 1),
-            dtype=int,
-        )
-        self.clone_receives = torch.zeros(
-            size=(self.num_walkers, 1),
-            dtype=int,
-        )
-
-        self.root_actions = None
 
         it = tqdm(range(self.k), desc="Simulating with FMC", total=self.k, disable=not use_tqdm)
         for self.simulation_iteration in it:
