@@ -1,4 +1,5 @@
 import gym
+import numpy as np
 
 from fractal_zero.config import FMCConfig
 from fractal_zero.search.fmc import FMC
@@ -82,10 +83,15 @@ def test_cartpole_solution():
     vec_env.batch_reset()
 
     # no walkers will die from this, and the cumulative rewards should be exact.
-    fmc = FMC(vec_env)
+    config = FMCConfig(gamma=1, num_walkers=NUM_WALKERS, clone_strategy="cumulative_reward")
+    fmc = FMC(vec_env, config=config)
     fmc.simulate(8, use_tqdm=True)
     cumulative_rewards = fmc.reward_buffer.sum(dim=1)
     assert cumulative_rewards.shape == (NUM_WALKERS, 1)
     assert fmc.reward_buffer.sum() == NUM_WALKERS * 8
-
+    # print(fmc.root_value_sum, fmc.root_visits)
+    print(fmc.value_sum_buffer, fmc.visit_buffer)
+    np.testing.assert_almost_equal(fmc.root_value, 8)
     print(fmc.root_value)
+
+    fmc = FMC(vec_env)

@@ -135,8 +135,6 @@ class FMC:
         )
 
         self.root_actions = None
-        self.root_value_sum = 0
-        self.root_visits = 0
 
         it = tqdm(range(self.k), desc="Simulating with FMC", total=self.k, disable=not use_tqdm)
         for self.simulation_iteration in it:
@@ -335,17 +333,17 @@ class FMC:
             discounted_values = current_value_buffer[mask] * self.config.gamma
             current_value_buffer[mask] = step_rewards + discounted_values
 
-        self.value_sum_buffer += current_value_buffer
+        self.value_sum_buffer[:] = current_value_buffer
         self.visit_buffer += mask.unsqueeze(-1)
-
-        self.root_value_sum += current_value_buffer.sum()
-        self.root_visits += mask.sum()
 
     @property
     def root_value(self):
-        """Kind of equivalent to the MCTS root value."""
+        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average 
+        value of each child node to the root with respect to the "visit count".
+        """
 
-        return (self.root_value_sum / self.root_visits).item()
+        weighted_values = self.value_sum_buffer * self.visit_buffer
+        return weighted_values.sum() / self.visit_buffer.sum()
 
     @torch.no_grad()
     def _get_highest_value_action(self):
