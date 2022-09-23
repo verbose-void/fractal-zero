@@ -63,8 +63,8 @@ class FractalZeroConfig:
     minimize_batch_padding: bool = True
     learning_rate: float = 0.001
     lr_scheduler_config: dict = field(default_factory=lambda: CONSTANT_LR_CONFIG)
-    weight_decay: float = 1e-4
-    momentum: float = 0.9  # only if optimizer is SGD
+    weight_decay: float = 0
+    momentum: float = 0  # only if optimizer is SGD
     optimizer: str = "SGD"
 
     lookahead_steps: int = 64

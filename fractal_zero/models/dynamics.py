@@ -21,17 +21,13 @@ class FullyConnectedDynamicsModel(torch.nn.Module):
         self.embedding_net = torch.nn.Sequential(
             torch.nn.Linear(in_dim, self.embedding_size),
             torch.nn.ReLU(),
-            torch.nn.Linear(self.embedding_size, self.embedding_size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.embedding_size, self.embedding_size),
-            torch.nn.ReLU(),
         )
 
         # TODO: explain why it's called auxiliary (hint: it's more general than reward head)
         self.auxiliary_net = torch.nn.Sequential(
             torch.nn.Linear(self.embedding_size, self.out_features)
         )
-        self.auxiliary_loss = F.cross_entropy
+        self.auxiliary_loss = F.mse_loss
 
         self.state = None
 
