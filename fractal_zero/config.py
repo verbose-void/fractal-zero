@@ -34,7 +34,7 @@ class FMCConfig:
     search_using_actual_environment: bool = True
 
     backprop_strategy: str = "all"  # all, clone_mask, or clone_participants
-    clone_strategy: str = "predicted_values"  # predicted_values or cumulative_reward
+    clone_strategy: str = "cumulative_reward"  # predicted_values or cumulative_reward
 
     use_wandb: bool = False
 

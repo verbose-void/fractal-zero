@@ -44,16 +44,20 @@ class FMC:
     def __init__(
         self,
         vectorized_environment: VectorizedEnvironment,
+        policy_model: torch.nn.Module = None,
         value_model: torch.nn.Module = None,
         config: FMCConfig = None,
         verbose: bool = False,
     ):
         self.vectorized_environment = vectorized_environment
+        self.policy_model = policy_model
         self.value_model = value_model
         self.verbose = verbose
 
         self.config = self._build_default_config() if config is None else config
         self._validate_config()
+
+        self.observations = self.vectorized_environment.batch_reset()
 
         self.reset()
 
@@ -111,7 +115,7 @@ class FMC:
     @property
     def batch_actions(self):
         if self.config.search_using_actual_environment:
-            return self.raw_actions
+            return self.parsed_actions
         return self.actions
 
     @torch.no_grad()
@@ -135,7 +139,7 @@ class FMC:
         # TODO: use tree structure instead of divergent histories. will save lots of memory.
 
         for i, history in enumerate(self.game_histories):
-            action = self.raw_actions[i]
+            action = self.parsed_actions[i]
             observation = self.observations[i]
             reward = self.rewards[i]
             value = None
@@ -185,9 +189,14 @@ class FMC:
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
-        # TODO: use the policy function for action selection.
-        self.raw_actions = self.vectorized_environment.batched_action_space_sample()
-        self.actions = torch.tensor(self.raw_actions, device=self.device).unsqueeze(-1)
+        if self.policy_model:
+            self.actions = self.policy_model.forward(self.observations, with_randomness=True)
+            self.parsed_actions = self.policy_model.parse_actions(self.actions)
+
+        else:
+            # use pure random actions if no policy model is provided.
+            self.parsed_actions = self.vectorized_environment.batched_action_space_sample()
+            self.actions = torch.tensor(self.parsed_actions, device=self.device).unsqueeze(-1)
 
         if self.root_actions is None:
             self.root_actions = self.actions.cpu().detach().clone()

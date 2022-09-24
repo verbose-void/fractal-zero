@@ -68,7 +68,7 @@ def test_cartpole_dynamics_function():
     vec_env = VectorizedDynamicsModelEnvironment(env, NUM_WALKERS, joint_model)
     vec_env.batch_reset()
 
-    fmc = FMC(vec_env, prediction_model=joint_model.prediction_model, config=config)
+    fmc = FMC(vec_env, value_model=joint_model.prediction_model, config=config)
     fmc.simulate(16)
 
 
