@@ -1,5 +1,7 @@
 import gym
 import numpy as np
+from tqdm import tqdm
+import torch
 
 from fractal_zero.config import FMCConfig
 from fractal_zero.search.fmc import FMC
@@ -30,10 +32,8 @@ def test_cartpole_actual_environment():
 
     fmc = FMC(vec_env, model, config, verbose=False)
 
-    action = fmc.simulate(16)
-    root_value = fmc.root_value
-
-    assert root_value > 5
+    fmc.simulate(16)
+    assert fmc.root_value > 5
 
 
 def test_cartpole_actual_environment_no_value_function():
@@ -50,9 +50,8 @@ def test_cartpole_actual_environment_no_value_function():
     ), "Cannot use predicted values to clone when no value function exists."
 
     fmc.simulate(16)
-    root_value = fmc.root_value
 
-    assert root_value > 5
+    assert fmc.root_value > 5
 
 
 def test_cartpole_dynamics_function():
@@ -70,11 +69,7 @@ def test_cartpole_dynamics_function():
     vec_env.batch_reset()
 
     fmc = FMC(vec_env, prediction_model=joint_model.prediction_model, config=config)
-
-    action = fmc.simulate(16)
-    root_value = fmc.root_value
-
-    print(action, root_value)
+    fmc.simulate(16)
 
 
 def test_cartpole_exact_reward_and_values():
@@ -123,3 +118,56 @@ def test_cartpole_consistently_high_reward():
     print(root_values)
     assert np.mean(max_rewards) > 120
     assert np.mean(root_values) > 100
+
+
+def test_cartpole_with_value_function_temporal_difference_learning():
+    n = 64
+
+    env = gym.make("CartPole-v0")
+    vec_env = RayVectorizedEnvironment(env, n=n)
+
+    # in order to train the value network, the cloning exploitation will be based on the cumulative reward (aka advantage)
+    # instead of value estimates. this is just to guarentee good samples for the value function to be determined for simplicity
+    # and consistency of test
+    config = FMCConfig(gamma=0.99, num_walkers=n, clone_strategy="cumulative_reward")
+    fmc = FMC(vec_env, config=config)
+
+    # TODO: TD train value function, then evaluate how FMC performs.
+    
+    num_games = 2
+    max_steps = 10
+    lookahead_steps = 2
+
+    observations = []
+    value_targets = []
+
+    # NOTE: because we are using the cumulative reward clone exploitation strategy, training the value network 
+    # while generating the data will have no impact on performance.
+    for _ in tqdm(range(num_games), desc="Playing games and generating data"):
+        obs = env.reset()
+
+        for _ in tqdm(range(max_steps), desc="Playing game"):
+            fmc.reset()
+            vec_env.set_all_states(env, obs)
+            fmc_selected_action = fmc.simulate(lookahead_steps)
+
+            observations.append(torch.tensor([obs]))
+            value_targets.append(fmc.root_value)
+
+            obs, reward, done, info = env.step(fmc_selected_action)
+
+            if done:
+                break
+
+
+    # NOTE: the value estimates after training will be relative to the number of lookahead steps
+    # that was used during the generation of the data.
+    value_targets = torch.tensor(value_targets) / lookahead_steps  # NOTE: normalized
+    observations = torch.cat(observations)
+
+    # NOTE: assuming the value can be derived directly from a observation -> value mapping (no
+    # context of surrounding observations)
+
+    # epochs = 2
+    # for _ in tqdm(range(epochs), desc="TD learning value function"):
+    #     pass
