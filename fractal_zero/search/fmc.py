@@ -1,6 +1,7 @@
 from warnings import warn
 import torch
 import numpy as np
+from tqdm import tqdm
 
 import wandb
 
@@ -54,6 +55,25 @@ class FMC:
             self.config = config
         self._validate_config()
 
+        self.reset()
+
+    def reset(self):
+        # TODO: explain all these variables
+        # NOTE: they should exist on the CPU.
+        self.value_sum_buffer = torch.zeros(
+            size=(self.num_walkers, 1),
+            dtype=float,
+        )
+        self.visit_buffer = torch.zeros(
+            size=(self.num_walkers, 1),
+            dtype=int,
+        )
+        self.clone_receives = torch.zeros(
+            size=(self.num_walkers, 1),
+            dtype=int,
+        )
+        self.root_actions = None
+
     def _build_default_config(self) -> FMCConfig:
         use_actual_env = not isinstance(
             self.vectorized_environment, VectorizedDynamicsModelEnvironment
@@ -98,7 +118,7 @@ class FMC:
 
         self._assign_actions()
 
-        self.observations, self.rewards, _, _ = self.vectorized_environment.batch_step(
+        self.observations, self.rewards, self.dones, _ = self.vectorized_environment.batch_step(
             self.batch_actions
         )
 
@@ -108,36 +128,20 @@ class FMC:
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
     @torch.no_grad()
-    def simulate(self, k: int, greedy_action: bool = True):
+    def simulate(self, k: int, greedy_action: bool = True, use_tqdm: bool = False):
         """Run FMC for k iterations, returning the best action that was taken at the root/initial state."""
 
         self.k = k
         assert self.k > 0
 
-        # TODO: explain all these variables
-        # NOTE: they should exist on the CPU.
+        # NOTE: can't exist in reset.
         self.reward_buffer = torch.zeros(
             size=(self.num_walkers, self.k, 1),
             dtype=float,
         )
-        self.value_sum_buffer = torch.zeros(
-            size=(self.num_walkers, 1),
-            dtype=float,
-        )
-        self.visit_buffer = torch.zeros(
-            size=(self.num_walkers, 1),
-            dtype=int,
-        )
-        self.clone_receives = torch.zeros(
-            size=(self.num_walkers, 1),
-            dtype=int,
-        )
 
-        self.root_actions = None
-        self.root_value_sum = 0
-        self.root_visits = 0
-
-        for self.simulation_iteration in range(self.k):
+        it = tqdm(range(self.k), desc="Simulating with FMC", total=self.k, disable=not use_tqdm)
+        for self.simulation_iteration in it:
             self._perturbate()
             self._prepare_clone_variables()
             self._backpropagate_reward_buffer()
@@ -328,23 +332,22 @@ class FMC:
         mask = self._get_backprop_mask()
 
         current_value_buffer = torch.zeros_like(self.value_sum_buffer)
-        for i in reversed(range(self.simulation_iteration)):
-            current_value_buffer[mask] = (
-                self.reward_buffer[mask, i]
-                + current_value_buffer[mask] * self.config.gamma
-            )
+        for i in reversed(range(self.simulation_iteration + 1)):
+            step_rewards = self.reward_buffer[mask, i]
+            discounted_values = current_value_buffer[mask] * self.config.gamma
+            current_value_buffer[mask] = step_rewards + discounted_values
 
-        self.value_sum_buffer += current_value_buffer
+        self.value_sum_buffer[:] = current_value_buffer
         self.visit_buffer += mask.unsqueeze(-1)
-
-        self.root_value_sum += current_value_buffer.sum()
-        self.root_visits += mask.sum()
 
     @property
     def root_value(self):
-        """Kind of equivalent to the MCTS root value."""
+        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average 
+        value of each child node to the root with respect to the "visit count".
+        """
 
-        return (self.root_value_sum / self.root_visits).item()
+        weighted_values = self.value_sum_buffer * self.visit_buffer
+        return weighted_values.sum() / self.visit_buffer.sum()
 
     @torch.no_grad()
     def _get_highest_value_action(self):
