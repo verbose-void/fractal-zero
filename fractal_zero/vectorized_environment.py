@@ -106,7 +106,7 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             infos,
         )
 
-    def set_all_states(self, new_env: gym.Env, _):
+    def set_all_states(self, new_env: gym.Env, obs: np.ndarray):
         # NOTE: don't need to call ray.get here.
         [env.set_state.remote(new_env) for env in self.envs]
 
@@ -158,7 +158,7 @@ class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
 
         return observations, rewards, dones, infos
 
-    def set_all_states(self, _, obs: np.ndarray):
+    def set_all_states(self, new_env: gym.Env, obs: np.ndarray):
         # TODO: explain, also how this interacts with FMC.
 
         device = self.joint_model.device
