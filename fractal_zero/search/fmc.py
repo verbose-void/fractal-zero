@@ -1,13 +1,16 @@
+from copy import deepcopy
+from typing import List
+from uuid import uuid4
 from warnings import warn
 import torch
 import numpy as np
 from tqdm import tqdm
 
 import wandb
+from fractal_zero.config import FMCConfig
 
-from fractal_zero.config import FMCConfig, FractalZeroConfig
+from fractal_zero.data.replay_buffer import GameHistory
 
-from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import mean_min_max_dict
 from fractal_zero.vectorized_environment import (
     VectorizedDynamicsModelEnvironment,
@@ -41,18 +44,15 @@ class FMC:
     def __init__(
         self,
         vectorized_environment: VectorizedEnvironment,
-        prediction_model: torch.nn.Module = None,
+        value_model: torch.nn.Module = None,
         config: FMCConfig = None,
         verbose: bool = False,
     ):
         self.vectorized_environment = vectorized_environment
-        self.model = prediction_model
+        self.value_model = value_model
         self.verbose = verbose
 
-        if config is None:
-            self.config = self._build_default_config()
-        else:
-            self.config = config
+        self.config = self._build_default_config() if config is None else config
         self._validate_config()
 
         self.reset()
@@ -74,6 +74,8 @@ class FMC:
         )
         self.root_actions = None
 
+        self.game_histories = [GameHistory(None) for _ in range(self.num_walkers)]
+
     def _build_default_config(self) -> FMCConfig:
         use_actual_env = not isinstance(
             self.vectorized_environment, VectorizedDynamicsModelEnvironment
@@ -83,7 +85,7 @@ class FMC:
             num_walkers=self.vectorized_environment.n,
             search_using_actual_environment=use_actual_env,
             clone_strategy="predicted_values"
-            if self.model is not None
+            if self.value_model is not None
             else "cumulative_reward",
         )
 
@@ -93,7 +95,7 @@ class FMC:
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
             )
 
-        if self.model is None and self.config.clone_strategy == "predicted_values":
+        if self.value_model is None and self.config.clone_strategy == "predicted_values":
             raise ValueError(
                 "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
             )
@@ -122,10 +124,22 @@ class FMC:
             self.batch_actions
         )
 
-        if self.model is not None:
-            _, self.predicted_values = self.model.forward(self.observations)
+        if self.value_model is not None:
+            self.predicted_values = self.value_model.forward(self.observations)
 
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
+
+        self._update_game_histories()
+
+    def _update_game_histories(self):
+        # TODO: use tree structure instead of divergent histories. will save lots of memory.
+
+        for i, history in enumerate(self.game_histories):
+            action = self.raw_actions[i]
+            observation = self.observations[i]
+            reward = self.rewards[i]
+            value = None
+            history.append(action, observation, reward, value)
 
     @torch.no_grad()
     def simulate(self, k: int, greedy_action: bool = True, use_tqdm: bool = False):
@@ -300,6 +314,8 @@ class FMC:
         self._clone_vector(self.visit_buffer)
         self._clone_vector(self.clone_receives)  # yes... clone clone receives lol.
 
+        self._clone_game_histories()
+
         if self.verbose:
             print("state after", self.state)
 
@@ -369,6 +385,13 @@ class FMC:
 
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
+
+    def _clone_game_histories(self):
+        for i, do_clone in enumerate(self.clone_mask):
+            if not do_clone:
+                continue
+            new_history = self.game_histories[self.clone_partners[i]]
+            self.game_histories[i] = deepcopy(new_history)  # TODO: EXTREMELY INEFFICIENT!
 
     def log(self, *args, **kwargs):
         # TODO: separate logger class
