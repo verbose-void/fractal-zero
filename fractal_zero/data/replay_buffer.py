@@ -63,7 +63,7 @@ class ReplayBuffer:
         self.explore = None
         self.virtual_rewards = None
 
-    def _maybe_pop_one(self):
+    def _maybe_pop_one(self, replacement_game_history: GameHistory):
         # TODO: docstring
 
         if len(self) < self.config.max_replay_buffer_size:
@@ -76,8 +76,10 @@ class ReplayBuffer:
         elif strat == "random":
             i = np.random.randint(0, len(self))
         elif strat == "balanced":
+            obs = replacement_game_history[-1][0]
+
             self.exploit = -torch.tensor(self.get_episode_lengths(), dtype=float)
-            self.explore = -self._get_episode_distances()
+            self.explore = -self._get_episode_distances(obs)
             self.virtual_rewards = calculate_virtual_rewards(self.exploit, self.explore, softmax=True)
             i = np.random.choice(range(len(self)), p=self.virtual_rewards)
         else:
@@ -92,7 +94,7 @@ class ReplayBuffer:
         to the pop strategy specified in the config.
         """
 
-        self._maybe_pop_one()
+        self._maybe_pop_one(game_history)
         self.game_histories.append(game_history)
 
         if len(self) > self.config.max_replay_buffer_size:
@@ -148,15 +150,23 @@ class ReplayBuffer:
     def get_episode_lengths(self):
         return [len(history) for history in self.game_histories]
 
-    def _get_episode_distances(self):
-        # TODO: use model embedding instead of last observations
+    def _get_episode_distances(self, ref_obs: np.ndarray = None):
+        # TODO: docstring, this is a dense function.
+
+        n = len(self) if ref_obs is None else len(self) + 1
+        last_observations = np.zeros((n, *self.config.observation_shape))
         
-        last_observations = np.zeros((len(self), *self.config.observation_shape))
         for i in range(len(self)):
             last_observations[i] = self[i][-1][0]
-        partners = determine_partners(len(self))
 
-        return calculate_distances(torch.tensor(last_observations, dtype=float), partners)
+        if ref_obs is not None:
+            last_observations[-1] = ref_obs
+            partners = -torch.ones(n).long()
+        else:
+            partners = determine_partners(len(self))
+
+        dists = calculate_distances(torch.tensor(last_observations, dtype=float), partners)
+        return dists if ref_obs is None else dists[:-1]
 
     def __getitem__(self, index):
         return self.game_histories[index]
