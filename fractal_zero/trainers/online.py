@@ -2,6 +2,8 @@ from typing import Union
 import torch
 import torch.nn.functional as F
 import gym
+import wandb
+
 from fractal_zero.data.replay_buffer import GameHistory
 from fractal_zero.search.fmc import FMC
 
@@ -48,8 +50,15 @@ class OnlineFMCPolicyTrainer:
 
         self.optimizer.step()
 
+        self._log_last_episode(loss.item())
         return loss.item()
 
-        # game_history_weights = F.softmax(self.fmc.visit_buffer.float(), dim=0)
+    def _log_last_episode(self, train_loss: float):
+        if wandb.run is None:
+            return
+
+        wandb.log({
+            "train/loss": train_loss,
+        })
 
         
