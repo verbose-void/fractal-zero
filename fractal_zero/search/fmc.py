@@ -189,14 +189,30 @@ class FMC:
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
+        # TODO: config
+        use_epsilon_greedy = True
+
+        random_parsed_actions = self.vectorized_environment.batched_action_space_sample()
+        random_actions = torch.tensor(random_parsed_actions, device=self.device)
+
         if self.policy_model:
-            self.actions = self.policy_model.forward(self.observations, with_randomness=True)
+            with_randomness = not use_epsilon_greedy
+            policy_actions = self.policy_model.forward(self.observations, with_randomness=with_randomness)
+            # policy_parsed_actions = self.policy_model.parse_actions(self.actions)
+
+            if use_epsilon_greedy:
+                # TODO: epsilon param
+                greedy_mask = torch.rand(self.num_walkers) < 0.1
+            else:
+                greedy_mask = torch.ones(self.num_walkers, dtype=bool)
+
+            self.actions = torch.where(greedy_mask, policy_actions, random_actions)
             self.parsed_actions = self.policy_model.parse_actions(self.actions)
 
         else:
             # use pure random actions if no policy model is provided.
-            self.parsed_actions = self.vectorized_environment.batched_action_space_sample()
-            self.actions = torch.tensor(self.parsed_actions, device=self.device).unsqueeze(-1)
+            self.parsed_actions = random_parsed_actions
+            self.actions = random_actions.unsqueeze(-1)
 
         if self.root_actions is None:
             self.root_actions = self.actions.cpu().detach().clone()
@@ -381,7 +397,7 @@ class FMC:
         self.walker_values = self.value_sum_buffer / self.visit_buffer
         highest_value_walker_index = torch.argmax(self.walker_values)
         highest_value_action = (
-            self.root_actions[highest_value_walker_index, 0].cpu().numpy()
+            self.root_actions[highest_value_walker_index].cpu().numpy()
         )
 
         return highest_value_action
