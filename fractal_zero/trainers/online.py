@@ -28,6 +28,8 @@ class OnlineFMCPolicyTrainer:
     def _get_batch(self):
         history = self._get_best_history()
 
+        self.last_episode_total_reward = history.total_reward
+
         x = torch.stack(history.observations[1:]).float()
         t = torch.tensor(history.actions[1:])
         return x, t.long()
@@ -35,7 +37,7 @@ class OnlineFMCPolicyTrainer:
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
 
-        self.fmc = FMC(self.vec_env, self.policy_model)
+        self.fmc = FMC(self.vec_env, policy_model=self.policy_model)
         self.fmc.simulate(max_steps)
 
     def train_on_latest_episode(self):
@@ -43,22 +45,45 @@ class OnlineFMCPolicyTrainer:
         self.optimizer.zero_grad()
 
         x, t = self._get_batch()
-        y = self.policy_model.forward(x)
+        y = self.policy_model.forward(x, argmax=False)
 
         loss = F.cross_entropy(y, t)
         loss.backward()
 
         self.optimizer.step()
 
-        self._log_last_episode(loss.item())
+        self._log_last_train_step(loss.item())
         return loss.item()
 
-    def _log_last_episode(self, train_loss: float):
+    def evaluate_policy(self, max_steps: int):
+        self.policy_model.eval()
+
+        obs = self.env.reset()
+
+        rewards = []
+
+        for _ in range(max_steps):
+            action = self.policy_model.forward(obs)
+            action = self.policy_model.parse_actions(action)
+            obs, reward, done, info = self.env.step(action)
+            rewards.append(reward)
+
+        self._log_last_eval_step(rewards)
+
+    def _log_last_train_step(self, train_loss: float):
         if wandb.run is None:
             return
 
         wandb.log({
             "train/loss": train_loss,
+            "train/epsiode_reward": self.last_episode_total_reward,
         })
 
+    def _log_last_eval_step(self, rewards):
+        if wandb.run is None:
+            return
+
+        wandb.log({
+            "eval/total_rewards": sum(rewards),
+        })
         
