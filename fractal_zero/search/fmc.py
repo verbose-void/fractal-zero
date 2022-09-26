@@ -189,13 +189,14 @@ class FMC:
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
-        # TODO: config
-        use_epsilon_greedy = True
 
         random_parsed_actions = self.vectorized_environment.batched_action_space_sample()
         random_actions = torch.tensor(random_parsed_actions, device=self.device)
 
         if self.policy_model:
+            # TODO: config
+            use_epsilon_greedy = True
+
             with_randomness = not use_epsilon_greedy
             policy_actions = self.policy_model.forward(self.observations, with_randomness=with_randomness)
             # policy_parsed_actions = self.policy_model.parse_actions(self.actions)

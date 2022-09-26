@@ -25,26 +25,43 @@ class OnlineFMCPolicyTrainer:
     def _get_best_history(self) -> GameHistory:
         return max(self.fmc.game_histories, key=lambda h: h.total_reward)
         
-    def _get_batch(self):
-        history = self._get_best_history()
-
+    def _get_obs_action_pairs(self, history):
         self.last_episode_total_reward = history.total_reward
 
         x = torch.stack(history.observations[1:]).float()
         t = torch.tensor(history.actions[1:])
         return x, t.long()
 
+    def _get_best_only_batch(self):
+        return self._get_obs_action_pairs(self._get_best_history())
+
+    def _get_all_histories_batch(self):
+        total_rewards = []
+        observations = []
+        actions = []
+
+        for history in self.fmc.game_histories:
+            total_rewards.append(history.total_reward)
+
+            x, t = self._get_obs_action_pairs(history)
+            observations.append(x)
+            actions.append(t)
+
+        # TODO: sort/weight by total rewards?
+        return torch.cat(observations), torch.cat(actions)
+
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
 
-        self.fmc = FMC(self.vec_env, policy_model=self.policy_model)
+        self.fmc = FMC(self.vec_env) #, policy_model=self.policy_model)
         self.fmc.simulate(max_steps)
 
     def train_on_latest_episode(self):
         self.policy_model.train()
         self.optimizer.zero_grad()
 
-        x, t = self._get_batch()
+        # x, t = self._get_best_only_batch()
+        x, t = self._get_all_histories_batch()
         y = self.policy_model.forward(x, argmax=False)
 
         loss = F.cross_entropy(y, t)
