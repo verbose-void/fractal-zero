@@ -36,19 +36,19 @@ class OnlineFMCPolicyTrainer:
         return self._get_obs_action_pairs(self._get_best_history())
 
     def _get_all_histories_batch(self):
-        total_rewards = []
         observations = []
         actions = []
 
         for history in self.fmc.game_histories:
-            total_rewards.append(history.total_reward)
 
             x, t = self._get_obs_action_pairs(history)
             observations.append(x)
             actions.append(t)
 
+        trajectory_weights = torch.softmax(self.fmc.clone_receives.flatten().float(), 0)
+
         # TODO: sort/weight by total rewards?
-        return torch.cat(observations), torch.cat(actions)
+        return observations, actions, trajectory_weights
 
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
@@ -61,10 +61,20 @@ class OnlineFMCPolicyTrainer:
         self.optimizer.zero_grad()
 
         # x, t = self._get_best_only_batch()
-        x, t = self._get_all_histories_batch()
-        y = self.policy_model.forward(x, argmax=False)
 
-        loss = F.cross_entropy(y, t)
+        observations, actions, weights = self._get_all_histories_batch()
+        assert len(observations) == len(actions) == len(weights)
+
+        # TODO: explain
+        loss = 0
+        for obs, action_targets, weight in zip(observations, actions, weights):
+            y = self.policy_model.forward(obs, argmax=False)
+            trajectory_loss = F.cross_entropy(y, action_targets)
+            loss += trajectory_loss * weight
+
+        # y = self.policy_model.forward(x, argmax=False)
+        # loss = F.cross_entropy(y, t)
+
         loss.backward()
 
         self.optimizer.step()
