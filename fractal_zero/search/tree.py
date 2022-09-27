@@ -8,18 +8,16 @@ from uuid import UUID, uuid4
 
 
 class StateNode:
-    def __init__(self, observation, reward, terminal: bool = False):
+    def __init__(self, observation, reward, num_child_walkers: int = 1, terminal: bool = False):
         self.id = uuid4()
         self.observation = observation
         self.reward = reward
         self.terminal = terminal
-
-    @staticmethod
-    def make_root(root_observation=None, root_reward: float=0):
-        return StateNode(observation=root_observation, reward=root_reward, terminal=False)
+        
+        self.num_child_walkers = num_child_walkers
 
     def __str__(self) -> str:
-        return f"{self.reward}"
+        return f"{self.num_child_walkers}"
 
     def __repr__(self):
         return self.__str__
@@ -50,7 +48,7 @@ class GameTree:
     def __init__(self, num_walkers: int, root_observation = None):
         self.num_walkers = num_walkers
 
-        self.root = StateNode.make_root(root_observation)
+        self.root = StateNode(root_observation, reward=0, num_child_walkers=self.num_walkers, terminal=False)
         self.walker_paths = [Path(self.root) for _ in range(self.num_walkers)]
 
         self.g = nx.Graph()
@@ -59,23 +57,12 @@ class GameTree:
     def build_next_level(self, actions: Sequence, new_observations: Sequence, rewards: Sequence):
         assert len(actions) == len(new_observations) == len(rewards) == self.num_walkers
 
-        # TODO
-        # step 1:
-        # we need to create a new layer of nodes.
-
-        # however, we shouldn't just create a node for every walker, because some walkers may have
-        # cloned to others. 
-        # we need to register a new node for every *unique* state that was created before the next step.
-        
-        # the edge between these states should have an action.
-
         # TODO: how can we detect duplicate observations / action transitions to save memory?
-
         it = zip(self.walker_paths, actions, new_observations, rewards)
         for path, action, new_observation, reward in it:
-            # TODO: terminals
-
             last_node = path.last_node
+
+            # TODO: denote terminal states
             new_node = StateNode(new_observation, reward, terminal=False)
             path.add_node(new_node)
 
