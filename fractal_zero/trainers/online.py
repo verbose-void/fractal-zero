@@ -72,7 +72,9 @@ class OnlineFMCPolicyTrainer:
 
         path = self.fmc.tree.best_path
         for state, action in path:
-            observations.append(state.observation)
+            obs = torch.tensor(state.observation)
+
+            observations.append(obs)
             actions.append(action)
 
         x = torch.stack(observations).float()

@@ -65,6 +65,9 @@ class Path:
     def last_node(self):
         return self.ordered_states[-1]
 
+    def __len__(self):
+        return len(self.ordered_states)
+
     def __iter__(self):
         self._iter = 0
         return self
