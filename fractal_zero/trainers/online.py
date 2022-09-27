@@ -77,6 +77,8 @@ class OnlineFMCPolicyTrainer:
             observations.append(obs)
             actions.append(action)
 
+        self.last_episode_total_reward = path.total_reward
+
         x = torch.stack(observations).float()
         t = torch.tensor(actions)
         return [x], [t]
