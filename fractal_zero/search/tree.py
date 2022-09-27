@@ -24,20 +24,36 @@ class StateNode:
 
 
 class Path:
-    ordered_states: List[UUID]
+    ordered_states: List[StateNode]
 
-    def __init__(self, root: StateNode):
+    def __init__(self, root: StateNode, g: nx.Graph):
         self.root = root
         self.ordered_states = [root]
+        self.g = g
 
     def add_node(self, node: StateNode):
         self.ordered_states.append(node)
 
-    def clone_to(self, other_path: "Path"):
-        if self.root != other_path.root:
+    def clone_to(self, new_path: "Path"):
+        if self.root != new_path.root:
             raise ValueError("Cannot clone to a path unless they share the same root.")
 
-        self.ordered_states = deepcopy(other_path.ordered_states)
+        # backpropagate
+        it = zip(reversed(self.ordered_states), reversed(new_path.ordered_states))
+        for state, new_state in it:
+
+            if state == new_state:
+                # will break at root or the closest common state
+                break
+
+            state.num_child_walkers -= 1
+            new_state.num_child_walkers += 1
+
+            if state.num_child_walkers <= 0:
+                # TODO: PRUNE!
+                pass
+
+        self.ordered_states = deepcopy(new_path.ordered_states)
 
     @property
     def last_node(self):
@@ -49,10 +65,11 @@ class GameTree:
         self.num_walkers = num_walkers
 
         self.root = StateNode(root_observation, reward=0, num_child_walkers=self.num_walkers, terminal=False)
-        self.walker_paths = [Path(self.root) for _ in range(self.num_walkers)]
 
         self.g = nx.Graph()
         self.g.add_node(self.root)
+
+        self.walker_paths = [Path(self.root, self.g) for _ in range(self.num_walkers)]
 
     def build_next_level(self, actions: Sequence, new_observations: Sequence, rewards: Sequence):
         assert len(actions) == len(new_observations) == len(rewards) == self.num_walkers
@@ -67,15 +84,15 @@ class GameTree:
             path.add_node(new_node)
 
             self.g.add_edge(last_node, new_node, action=action)
-        
-        self._backpropagate()
 
-    def _backpropagate(self):
-        # TODO
-        # step 2:
-        # when a walker moves from one state to another laterally (cloning), the update should be
-        # backpropagated and pruning should occur when any node reaches a child visit count == 0.
-        pass
+    def clone(self, partners: Sequence, clone_mask: Sequence):
+        for i, path in enumerate(self.walker_paths):
+            if not clone_mask[i]:
+                # do not clone
+                continue
+
+            target_path = self.walker_paths[partners[i]]
+            path.clone_to(target_path)
 
     def render(self):
         nx.draw(self.g, with_labels=True)
