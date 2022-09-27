@@ -9,7 +9,7 @@ from tqdm import tqdm
 import wandb
 from fractal_zero.config import FMCConfig
 
-from fractal_zero.data.replay_buffer import GameHistory
+from fractal_zero.search.tree import GameTree
 
 from fractal_zero.utils import mean_min_max_dict
 from fractal_zero.vectorized_environment import (
@@ -57,7 +57,13 @@ class FMC:
         self.config = self._build_default_config() if config is None else config
         self._validate_config()
 
+        # TODO: maybe this reset and game tree construction should be called more cautiously.
         self.observations = self.vectorized_environment.batch_reset()
+        if self.config.track_game_tree:
+            root_observation = self.observations[0]
+            self.tree = GameTree(self.num_walkers, root_observation)
+        else:
+            self.tree = None
 
         self.reset()
 
@@ -77,8 +83,6 @@ class FMC:
             dtype=int,
         )
         self.root_actions = None
-
-        self.game_histories = [GameHistory(None) for _ in range(self.num_walkers)]
 
     def _build_default_config(self) -> FMCConfig:
         use_actual_env = not isinstance(
@@ -133,17 +137,8 @@ class FMC:
 
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
-        self._update_game_histories()
-
-    def _update_game_histories(self):
-        # TODO: use tree structure instead of divergent histories. will save lots of memory.
-
-        for i, history in enumerate(self.game_histories):
-            action = self.parsed_actions[i]
-            observation = self.observations[i]
-            reward = self.rewards[i]
-            value = None
-            history.append(action, observation, reward, value)
+        if self.tree:
+            self.tree.build_next_level(self.actions, self.observations, self.rewards)
 
     @torch.no_grad()
     def simulate(self, k: int, greedy_action: bool = True, use_tqdm: bool = False):
@@ -340,7 +335,8 @@ class FMC:
         self._clone_vector(self.visit_buffer)
         self._clone_vector(self.clone_receives)  # yes... clone clone receives lol.
 
-        self._clone_game_histories()
+        if self.tree:
+            self.tree.clone(self.clone_partners, self.clone_mask)
 
         if self.verbose:
             print("state after", self.state)
@@ -411,13 +407,6 @@ class FMC:
 
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
-
-    def _clone_game_histories(self):
-        for i, do_clone in enumerate(self.clone_mask):
-            if not do_clone:
-                continue
-            new_history = self.game_histories[self.clone_partners[i]]
-            self.game_histories[i] = deepcopy(new_history)  # TODO: EXTREMELY INEFFICIENT!
 
     def log(self, *args, **kwargs):
         # TODO: separate logger class

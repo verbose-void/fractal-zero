@@ -29,6 +29,8 @@ class FMCConfig:
     num_walkers: int = 8
     balance: float = 1
 
+    track_game_tree: bool = True
+
     # when True the lookahead search uses the environment directly (AlphaZero Style).
     # when False, the lookahead search uses a DynamicsModel instead of the environment (MuZero Style).
     search_using_actual_environment: bool = True
