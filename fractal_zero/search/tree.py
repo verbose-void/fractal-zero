@@ -1,5 +1,3 @@
-
-
 import networkx as nx
 import matplotlib.pyplot as plt
 from copy import deepcopy
