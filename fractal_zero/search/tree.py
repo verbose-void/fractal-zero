@@ -1,6 +1,5 @@
 import networkx as nx
 import matplotlib.pyplot as plt
-from copy import deepcopy
 from typing import List, Sequence
 from uuid import UUID, uuid4
 
@@ -98,5 +97,12 @@ class GameTree:
             path.clone_to(target_path)
 
     def render(self):
-        nx.draw(self.g, with_labels=True)
+        colors = []
+        for node in self.g.nodes:
+            if node == self.root:
+                colors.append("green")
+            else:
+                colors.append("blue")
+
+        nx.draw(self.g, with_labels=True, node_color=colors)
         plt.show()
