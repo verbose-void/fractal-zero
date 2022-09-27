@@ -22,34 +22,34 @@ class OnlineFMCPolicyTrainer:
         self.policy_model = policy_model
         self.optimizer = optimizer
 
-    def _get_best_history(self) -> GameHistory:
-        return max(self.fmc.game_histories, key=lambda h: h.total_reward)
+    # def _get_best_history(self) -> GameHistory:
+    #     return max(self.fmc.game_histories, key=lambda h: h.total_reward)
         
-    def _get_obs_action_pairs(self, history):
-        self.last_episode_total_reward = history.total_reward
+    # def _get_obs_action_pairs(self, history):
+    #     self.last_episode_total_reward = history.total_reward
 
-        x = torch.stack(history.observations[1:]).float()
-        t = torch.tensor(history.actions[1:])
-        return x, t.long()
+    #     x = torch.stack(history.observations[1:]).float()
+    #     t = torch.tensor(history.actions[1:])
+    #     return x, t.long()
 
-    def _get_best_only_batch(self):
-        obs, acts = self._get_obs_action_pairs(self._get_best_history())
-        return [obs], [acts]
+    # def _get_best_only_batch(self):
+    #     obs, acts = self._get_obs_action_pairs(self._get_best_history())
+    #     return [obs], [acts]
 
-    def _get_all_histories_batch(self):
-        observations = []
-        actions = []
+    # def _get_all_histories_batch(self):
+    #     observations = []
+    #     actions = []
 
-        for history in self.fmc.game_histories:
+    #     for history in self.fmc.game_histories:
 
-            x, t = self._get_obs_action_pairs(history)
-            observations.append(x)
-            actions.append(t)
+    #         x, t = self._get_obs_action_pairs(history)
+    #         observations.append(x)
+    #         actions.append(t)
 
-        trajectory_weights = torch.softmax(self.fmc.clone_receives.flatten().float(), 0)
+    #     trajectory_weights = torch.softmax(self.fmc.clone_receives.flatten().float(), 0)
 
-        # TODO: sort/weight by total rewards?
-        return observations, actions, trajectory_weights
+    #     # TODO: sort/weight by total rewards?
+    #     return observations, actions, trajectory_weights
 
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
@@ -57,12 +57,36 @@ class OnlineFMCPolicyTrainer:
         self.fmc = FMC(self.vec_env) #, policy_model=self.policy_model)
         self.fmc.simulate(max_steps)
 
+    def _get_batch(self):
+        if not self.fmc.tree:
+            raise ValueError("FMC is not tracking walker paths.")
+
+        # TODO: config
+        best_only = True
+
+        if not best_only:
+            raise NotImplementedError
+
+        observations = []
+        actions = []
+
+        path = self.fmc.tree.best_path
+        for state, action in path:
+            observations.append(state.observation)
+            actions.append(action)
+
+        x = torch.stack(observations).float()
+        t = torch.tensor(actions)
+        return [x], [t]
+
     def train_on_latest_episode(self):
         self.policy_model.train()
         self.optimizer.zero_grad()
 
         # observations, actions = self._get_best_only_batch()
-        observations, actions, _ = self._get_all_histories_batch()
+        # observations, actions, _ = self._get_all_histories_batch()
+
+        observations, actions = self._get_batch()
         assert len(observations) == len(actions)# == len(weights)
 
         loss = 0

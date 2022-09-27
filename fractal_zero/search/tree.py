@@ -58,8 +58,31 @@ class Path:
             self.ordered_states[i] = new_state
 
     @property
+    def total_reward(self):
+        return sum([s.reward for s in self.ordered_states])
+
+    @property
     def last_node(self):
         return self.ordered_states[-1]
+
+    def __iter__(self):
+        self._iter = 0
+        return self
+
+    def __next__(self):
+        # stop one early because the last state should have no child nodes
+        # therefore there won't be any actions registered for that state for this path.
+        if self._iter >= len(self) - 1:
+            raise StopIteration
+
+        state = self.ordered_states[self._iter]
+        next_state = self.ordered_states[self._iter + 1]
+
+        edge_data = self.g.get_edge_data(state, next_state)
+        action = edge_data["action"]
+
+        self._iter += 1
+        return state, action
 
 
 class GameTree:
@@ -95,6 +118,10 @@ class GameTree:
 
             target_path = self.walker_paths[partners[i]]
             path.clone_to(target_path)
+
+    @property
+    def best_path(self):
+        return max(self.walker_paths, key=lambda p: p.total_reward)
 
     def render(self):
         colors = []
