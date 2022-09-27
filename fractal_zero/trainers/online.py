@@ -50,34 +50,67 @@ class OnlineFMCPolicyTrainer:
             raise ValueError("FMC is not tracking walker paths.")
 
         # TODO: config
-        best_only = True
+        best_only = False
 
         if best_only:
             return self._get_best_only_batch()
 
-        raise NotImplementedError
+        # convert the game tree into a weighted set of targets, based on the visit counts
 
-        # convert the game tree into a weighted set of targets, based on the walker child counts
+        observations = []
+        child_actions = []
+        child_weights = []
+
         g = self.fmc.tree.g
         for node in g.nodes:
-            g.out_edges()
+            obs = torch.tensor(node.observation).float()
+            observations.append(obs)
+
+            actions = []
+            weights = []
+            for _, child_node, data in g.out_edges(node, data=True):
+                weights.append(child_node.visits)
+                action = data["action"]
+                actions.append(action)
+            
+            child_actions.append(actions)
+            child_weights.append(torch.tensor(weights).float())
+
+        x = torch.stack(observations).float()
+        return x, child_actions, child_weights
+
+    def _general_loss(self, action, action_targets, action_weights):
+        normalized_action_weights = action_weights / action_weights.sum()
+
+        loss = 0
+        for action_target, weight in zip(action_targets, normalized_action_weights):
+            print(action.shape, action_target.shape, weight)
+            loss += F.cross_entropy(action, action_target) * weight
+        return loss
 
     def train_on_latest_episode(self):
         self.policy_model.train()
         self.optimizer.zero_grad()
 
-        observations, actions = self._get_batch()
-        assert len(observations) == len(actions)
+        observations, actions, weights = self._get_batch()
+        assert len(observations) == len(actions) == len(weights)
 
+        # NOTE: loss for trajectories of single-target actions
+        # loss = 0
+        # for obs, action_targets in zip(observations, actions):
+        #     y = self.policy_model.forward(obs, argmax=False)
+        #     # all time steps equal in loss (maximizing average reward)
+        #     trajectory_loss = F.cross_entropy(y, action_targets)
+        #     loss += trajectory_loss
+        # # average over all trajectories included
+        # loss /= len(observations)
+
+        # NOTE: loss for trajectories of weighted multi-target actions
         loss = 0
-        for obs, action_targets in zip(observations, actions):
-            y = self.policy_model.forward(obs, argmax=False)
-
-            # all time steps equal in loss (maximizing average reward)
-            trajectory_loss = F.cross_entropy(y, action_targets)
+        action_predictions = self.policy_model.forward(observations, argmax=False)
+        for y, action_targets, action_weights in zip(action_predictions, actions, weights):
+            trajectory_loss = self._general_loss(y, action_targets, action_weights)
             loss += trajectory_loss
-
-        # average over all trajectories included
         loss /= len(observations)
 
         loss.backward()

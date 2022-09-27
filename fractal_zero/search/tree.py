@@ -45,6 +45,9 @@ class Path:
         # backpropagate
         for i, state, new_state in it:
 
+            # TODO: is this the best way to count visits? should we backprop all the way to root?
+            new_state.visits += 1
+
             if state == new_state:
                 # will break at root or the closest common state
                 break
@@ -52,10 +55,9 @@ class Path:
             state.num_child_walkers -= 1
             new_state.num_child_walkers += 1
 
-            # TODO: is this the best way to count visits? should we backprop all the way to root?
-            new_state.visits += 1
-
             if prune and state.num_child_walkers <= 0:
+                # TODO: force prune when the number of visits is reasonably low?
+
                 self.g.remove_node(state)
             
             # don't copy, just update reference
@@ -93,7 +95,7 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation = None, prune: bool = True):
+    def __init__(self, num_walkers: int, root_observation = None, prune: bool = False):
         self.num_walkers = num_walkers
         self.prune = prune
 
