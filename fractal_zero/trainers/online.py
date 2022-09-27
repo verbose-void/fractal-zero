@@ -28,16 +28,7 @@ class OnlineFMCPolicyTrainer:
         self.fmc = FMC(self.vec_env) #, policy_model=self.policy_model)
         self.fmc.simulate(max_steps)
 
-    def _get_batch(self):
-        if not self.fmc.tree:
-            raise ValueError("FMC is not tracking walker paths.")
-
-        # TODO: config
-        best_only = True
-
-        if not best_only:
-            raise NotImplementedError
-
+    def _get_best_only_batch(self):
         observations = []
         actions = []
 
@@ -53,6 +44,23 @@ class OnlineFMCPolicyTrainer:
         x = torch.stack(observations).float()
         t = torch.tensor(actions)
         return [x], [t]
+
+    def _get_batch(self):
+        if not self.fmc.tree:
+            raise ValueError("FMC is not tracking walker paths.")
+
+        # TODO: config
+        best_only = True
+
+        if best_only:
+            return self._get_best_only_batch()
+
+        raise NotImplementedError
+
+        # convert the game tree into a weighted set of targets, based on the walker child counts
+        g = self.fmc.tree.g
+        for node in g.nodes:
+            g.out_edges()
 
     def train_on_latest_episode(self):
         self.policy_model.train()

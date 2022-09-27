@@ -12,6 +12,7 @@ class StateNode:
         self.terminal = terminal
         
         self.num_child_walkers = num_child_walkers
+        self.visits = 1
 
     def __str__(self) -> str:
         return f"{self.num_child_walkers}"
@@ -51,6 +52,9 @@ class Path:
             state.num_child_walkers -= 1
             new_state.num_child_walkers += 1
 
+            # TODO: is this the best way to count visits? should we backprop all the way to root?
+            new_state.visits += 1
+
             if prune and state.num_child_walkers <= 0:
                 self.g.remove_node(state)
             
@@ -89,12 +93,13 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation = None):
+    def __init__(self, num_walkers: int, root_observation = None, prune: bool = True):
         self.num_walkers = num_walkers
+        self.prune = prune
 
         self.root = StateNode(root_observation, reward=0, num_child_walkers=self.num_walkers, terminal=False)
 
-        self.g = nx.Graph()
+        self.g = nx.DiGraph()
         self.g.add_node(self.root)
 
         self.walker_paths = [Path(self.root, self.g) for _ in range(self.num_walkers)]
@@ -120,7 +125,7 @@ class GameTree:
                 continue
 
             target_path = self.walker_paths[partners[i]]
-            path.clone_to(target_path)
+            path.clone_to(target_path, prune=self.prune)
 
     @property
     def best_path(self):
