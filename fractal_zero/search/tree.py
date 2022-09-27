@@ -137,7 +137,7 @@ class GameTree:
             if node == self.root:
                 colors.append("green")
             else:
-                colors.append("blue")
+                colors.append("red")
 
-        nx.draw(self.g, with_labels=True, node_color=colors)
+        nx.draw(self.g, with_labels=True, node_color=colors, node_size=80)
         plt.show()
