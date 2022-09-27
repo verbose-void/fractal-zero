@@ -33,7 +33,8 @@ class OnlineFMCPolicyTrainer:
         return x, t.long()
 
     def _get_best_only_batch(self):
-        return self._get_obs_action_pairs(self._get_best_history())
+        obs, acts = self._get_obs_action_pairs(self._get_best_history())
+        return [obs], [acts]
 
     def _get_all_histories_batch(self):
         observations = []
@@ -60,23 +61,22 @@ class OnlineFMCPolicyTrainer:
         self.policy_model.train()
         self.optimizer.zero_grad()
 
-        # x, t = self._get_best_only_batch()
+        # observations, actions = self._get_best_only_batch()
+        observations, actions, _ = self._get_all_histories_batch()
+        assert len(observations) == len(actions)# == len(weights)
 
-        observations, actions, weights = self._get_all_histories_batch()
-        assert len(observations) == len(actions) == len(weights)
-
-        # TODO: explain
         loss = 0
-        for obs, action_targets, weight in zip(observations, actions, weights):
+        for obs, action_targets in zip(observations, actions):#, weights):
             y = self.policy_model.forward(obs, argmax=False)
-            trajectory_loss = F.cross_entropy(y, action_targets)
-            loss += trajectory_loss * weight
 
-        # y = self.policy_model.forward(x, argmax=False)
-        # loss = F.cross_entropy(y, t)
+            # all time steps equal in loss (maximizing average reward)
+            trajectory_loss = F.cross_entropy(y, action_targets)
+            loss += trajectory_loss
+
+        # average over all trajectories included
+        loss /= len(observations)
 
         loss.backward()
-
         self.optimizer.step()
 
         self._log_last_train_step(loss.item())
