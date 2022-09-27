@@ -33,7 +33,7 @@ class Path:
         self.ordered_states = [root]
 
     def add_node(self, node: StateNode):
-        self.ordered_states.append(node.id)
+        self.ordered_states.append(node)
 
     def clone_to(self, other_path: "Path"):
         if self.root != other_path.root:
@@ -76,11 +76,10 @@ class GameTree:
             # TODO: terminals
 
             last_node = path.last_node
-            node = StateNode(new_observation, reward, terminal=False)
-            path.add_node(node)
+            new_node = StateNode(new_observation, reward, terminal=False)
+            path.add_node(new_node)
 
-            self.g.add_node(node)
-            self.g.add_edge(last_node, node, action=action)
+            self.g.add_edge(last_node, new_node, action=action)
         
         self._backpropagate()
 
