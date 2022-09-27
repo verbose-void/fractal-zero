@@ -34,7 +34,7 @@ class Path:
     def add_node(self, node: StateNode):
         self.ordered_states.append(node)
 
-    def clone_to(self, new_path: "Path"):
+    def clone_to(self, new_path: "Path", prune: bool = True):
         if self.root != new_path.root:
             raise ValueError("Cannot clone to a path unless they share the same root.")
 
@@ -49,9 +49,8 @@ class Path:
             state.num_child_walkers -= 1
             new_state.num_child_walkers += 1
 
-            if state.num_child_walkers <= 0:
-                # TODO: PRUNE!
-                pass
+            if prune and state.num_child_walkers <= 0:
+                self.g.remove_node(state)
 
         self.ordered_states = deepcopy(new_path.ordered_states)
 
