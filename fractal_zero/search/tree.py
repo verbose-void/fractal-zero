@@ -36,9 +36,14 @@ class Path:
         if self.root != new_path.root:
             raise ValueError("Cannot clone to a path unless they share the same root.")
 
+        # build iterator
+        reversed_indices = reversed(range(len(self.ordered_states)))
+        reversed_states = reversed(self.ordered_states)
+        reversed_new_states = reversed(new_path.ordered_states)
+        it = zip(reversed_indices, reversed_states, reversed_new_states)
+
         # backpropagate
-        it = zip(reversed(self.ordered_states), reversed(new_path.ordered_states))
-        for state, new_state in it:
+        for i, state, new_state in it:
 
             if state == new_state:
                 # will break at root or the closest common state
@@ -49,8 +54,9 @@ class Path:
 
             if prune and state.num_child_walkers <= 0:
                 self.g.remove_node(state)
-
-        self.ordered_states = deepcopy(new_path.ordered_states)
+            
+            # don't copy, just update reference
+            self.ordered_states[i] = new_state
 
     @property
     def last_node(self):
@@ -71,7 +77,7 @@ class GameTree:
     def build_next_level(self, actions: Sequence, new_observations: Sequence, rewards: Sequence):
         assert len(actions) == len(new_observations) == len(rewards) == self.num_walkers
 
-        # TODO: how can we detect duplicate observations / action transitions to save memory?
+        # TODO: how can we detect duplicate observations / action transitions to save memory? (might not be super important)
         it = zip(self.walker_paths, actions, new_observations, rewards)
         for path, action, new_observation, reward in it:
             last_node = path.last_node
