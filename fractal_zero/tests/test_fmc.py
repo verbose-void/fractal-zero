@@ -1,7 +1,6 @@
 import gym
 import numpy as np
-from tqdm import tqdm
-import torch
+import networkx as nx
 
 from fractal_zero.config import FMCConfig
 from fractal_zero.search.fmc import FMC
@@ -30,10 +29,15 @@ def test_cartpole_actual_environment():
     vec_env = RayVectorizedEnvironment(env, n=NUM_WALKERS)
     vec_env.batch_reset()
 
-    fmc = FMC(vec_env, model, config, verbose=False)
+    trials = 10
+    for _ in range(trials):
+        fmc = FMC(vec_env, config=config, verbose=False)
+        # fmc = FMC(vec_env, model, config, verbose=False)
+        
+        fmc.simulate(16)
+        assert nx.is_tree(fmc.tree.g)
 
-    fmc.simulate(16)
-    assert fmc.root_value > 5
+        assert fmc.root_value > 5  # TODO: update this...
 
 
 def test_cartpole_actual_environment_no_value_function():
