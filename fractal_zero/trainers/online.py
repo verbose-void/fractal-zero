@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Callable, Union
 import torch
 import torch.nn.functional as F
@@ -5,7 +6,7 @@ import gym
 import wandb
 
 from fractal_zero.search.fmc import FMC
-from fractal_zero.utils import get_space_distance_function
+from fractal_zero.utils import get_space_distance_function, kl_divergence_of_model_paramters
 
 from fractal_zero.vectorized_environment import RayVectorizedEnvironment, load_environment
 
@@ -96,6 +97,9 @@ class OnlineFMCPolicyTrainer:
         self.policy_model.train()
         self.optimizer.zero_grad()
 
+        # TODO: make more efficient somehow?
+        self.params_before = deepcopy(list(self.policy_model.parameters()))
+
         observations, actions, weights = self._get_batch()
         assert len(observations) == len(actions) == len(weights)
 
@@ -135,9 +139,12 @@ class OnlineFMCPolicyTrainer:
         best_path = self.fmc.tree.best_path
         last_episode_total_reward = best_path.total_reward
 
+        kl_div = kl_divergence_of_model_paramters(self.params_before, self.policy_model.parameters())
+
         wandb.log({
             "train/loss": train_loss,
             "train/epsiode_reward": last_episode_total_reward,
+            "train/policy_kl_div": kl_div,
         })
 
     def _log_last_eval_step(self, rewards):
