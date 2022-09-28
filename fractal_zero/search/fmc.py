@@ -58,7 +58,8 @@ class FMC:
         self._validate_config()
 
         # TODO: maybe this reset and game tree construction should be called more cautiously.
-        self.observations = self.vectorized_environment.batch_reset()
+        self.observations = self.vectorized_environment.batch_reset()          
+
         if self.config.track_game_tree:
             root_observation = self.observations[0]
             self.tree = GameTree(self.num_walkers, root_observation)
@@ -188,7 +189,7 @@ class FMC:
         random_parsed_actions = self.vectorized_environment.batched_action_space_sample()
         random_actions = torch.tensor(random_parsed_actions, device=self.device)
 
-        if self.policy_model:
+        if self.policy_model and self.config.use_policy_for_action_selection:
             # TODO: config
             use_epsilon_greedy = True
 

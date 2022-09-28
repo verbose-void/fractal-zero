@@ -30,6 +30,7 @@ class FMCConfig:
     balance: float = 1
 
     track_game_tree: bool = True
+    use_policy_for_action_selection: bool = False
 
     # when True the lookahead search uses the environment directly (AlphaZero Style).
     # when False, the lookahead search uses a DynamicsModel instead of the environment (MuZero Style).
