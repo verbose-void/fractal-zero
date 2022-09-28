@@ -1,13 +1,16 @@
+from copy import deepcopy
+from typing import List
+from uuid import uuid4
 from warnings import warn
 import torch
 import numpy as np
 from tqdm import tqdm
 
 import wandb
+from fractal_zero.config import FMCConfig
 
-from fractal_zero.config import FMCConfig, FractalZeroConfig
+from fractal_zero.search.tree import GameTree
 
-from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import mean_min_max_dict
 from fractal_zero.vectorized_environment import (
     VectorizedDynamicsModelEnvironment,
@@ -41,19 +44,27 @@ class FMC:
     def __init__(
         self,
         vectorized_environment: VectorizedEnvironment,
-        prediction_model: torch.nn.Module = None,
+        policy_model: torch.nn.Module = None,
+        value_model: torch.nn.Module = None,
         config: FMCConfig = None,
         verbose: bool = False,
     ):
         self.vectorized_environment = vectorized_environment
-        self.model = prediction_model
+        self.policy_model = policy_model
+        self.value_model = value_model
         self.verbose = verbose
 
-        if config is None:
-            self.config = self._build_default_config()
-        else:
-            self.config = config
+        self.config = self._build_default_config() if config is None else config
         self._validate_config()
+
+        # TODO: maybe this reset and game tree construction should be called more cautiously.
+        self.observations = self.vectorized_environment.batch_reset()
+
+        if self.config.track_game_tree:
+            root_observation = self.observations[0]
+            self.tree = GameTree(self.num_walkers, root_observation)
+        else:
+            self.tree = None
 
         self.reset()
 
@@ -83,7 +94,7 @@ class FMC:
             num_walkers=self.vectorized_environment.n,
             search_using_actual_environment=use_actual_env,
             clone_strategy="predicted_values"
-            if self.model is not None
+            if self.value_model is not None
             else "cumulative_reward",
         )
 
@@ -93,7 +104,10 @@ class FMC:
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
             )
 
-        if self.model is None and self.config.clone_strategy == "predicted_values":
+        if (
+            self.value_model is None
+            and self.config.clone_strategy == "predicted_values"
+        ):
             raise ValueError(
                 "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
             )
@@ -109,7 +123,7 @@ class FMC:
     @property
     def batch_actions(self):
         if self.config.search_using_actual_environment:
-            return self.raw_actions
+            return self.parsed_actions
         return self.actions
 
     @torch.no_grad()
@@ -118,14 +132,20 @@ class FMC:
 
         self._assign_actions()
 
-        self.observations, self.rewards, self.dones, _ = self.vectorized_environment.batch_step(
-            self.batch_actions
-        )
+        (
+            self.observations,
+            self.rewards,
+            self.dones,
+            _,
+        ) = self.vectorized_environment.batch_step(self.batch_actions)
 
-        if self.model is not None:
-            _, self.predicted_values = self.model.forward(self.observations)
+        if self.value_model is not None:
+            self.predicted_values = self.value_model.forward(self.observations)
 
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
+
+        if self.tree:
+            self.tree.build_next_level(self.actions, self.observations, self.rewards)
 
     @torch.no_grad()
     def simulate(self, k: int, greedy_action: bool = True, use_tqdm: bool = False):
@@ -140,7 +160,12 @@ class FMC:
             dtype=float,
         )
 
-        it = tqdm(range(self.k), desc="Simulating with FMC", total=self.k, disable=not use_tqdm)
+        it = tqdm(
+            range(self.k),
+            desc="Simulating with FMC",
+            total=self.k,
+            disable=not use_tqdm,
+        )
         for self.simulation_iteration in it:
             self._perturbate()
             self._prepare_clone_variables()
@@ -171,9 +196,34 @@ class FMC:
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
-        # TODO: use the policy function for action selection.
-        self.raw_actions = self.vectorized_environment.batched_action_space_sample()
-        self.actions = torch.tensor(self.raw_actions, device=self.device).unsqueeze(-1)
+        random_parsed_actions = (
+            self.vectorized_environment.batched_action_space_sample()
+        )
+        random_actions = torch.tensor(random_parsed_actions, device=self.device)
+
+        if self.policy_model and self.config.use_policy_for_action_selection:
+            # TODO: config
+            use_epsilon_greedy = True
+
+            with_randomness = not use_epsilon_greedy
+            policy_actions = self.policy_model.forward(
+                self.observations, with_randomness=with_randomness
+            )
+            # policy_parsed_actions = self.policy_model.parse_actions(self.actions)
+
+            if use_epsilon_greedy:
+                # TODO: epsilon param
+                greedy_mask = torch.rand(self.num_walkers) < 0.1
+            else:
+                greedy_mask = torch.ones(self.num_walkers, dtype=bool)
+
+            self.actions = torch.where(greedy_mask, policy_actions, random_actions)
+            self.parsed_actions = self.policy_model.parse_actions(self.actions)
+
+        else:
+            # use pure random actions if no policy model is provided.
+            self.parsed_actions = random_parsed_actions
+            self.actions = random_actions.unsqueeze(-1)
 
         if self.root_actions is None:
             self.root_actions = self.actions.cpu().detach().clone()
@@ -300,6 +350,9 @@ class FMC:
         self._clone_vector(self.visit_buffer)
         self._clone_vector(self.clone_receives)  # yes... clone clone receives lol.
 
+        if self.tree:
+            self.tree.clone(self.clone_partners, self.clone_mask)
+
         if self.verbose:
             print("state after", self.state)
 
@@ -342,7 +395,7 @@ class FMC:
 
     @property
     def root_value(self):
-        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average 
+        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average
         value of each child node to the root with respect to the "visit count".
         """
 
@@ -356,7 +409,7 @@ class FMC:
         self.walker_values = self.value_sum_buffer / self.visit_buffer
         highest_value_walker_index = torch.argmax(self.walker_values)
         highest_value_action = (
-            self.root_actions[highest_value_walker_index, 0].cpu().numpy()
+            self.root_actions[highest_value_walker_index].cpu().numpy()
         )
 
         return highest_value_action

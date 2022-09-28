@@ -16,6 +16,10 @@ class GameHistory:
         return self.observations[0].shape
 
     @property
+    def total_reward(self):
+        return sum(self.environment_reward_signals)
+
+    @property
     def action_shape(self):
         return tuple()  # TODO!
 

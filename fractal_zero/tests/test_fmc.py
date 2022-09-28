@@ -1,7 +1,6 @@
 import gym
 import numpy as np
-from tqdm import tqdm
-import torch
+import networkx as nx
 
 from fractal_zero.config import FMCConfig
 from fractal_zero.search.fmc import FMC
@@ -30,10 +29,15 @@ def test_cartpole_actual_environment():
     vec_env = RayVectorizedEnvironment(env, n=NUM_WALKERS)
     vec_env.batch_reset()
 
-    fmc = FMC(vec_env, model, config, verbose=False)
+    trials = 10
+    for _ in range(trials):
+        fmc = FMC(vec_env, config=config, verbose=False)
+        # fmc = FMC(vec_env, model, config, verbose=False)
 
-    fmc.simulate(16)
-    assert fmc.root_value > 5
+        fmc.simulate(16)
+        assert nx.is_tree(fmc.tree.g)
+
+        assert fmc.root_value > 5  # TODO: update this...
 
 
 def test_cartpole_actual_environment_no_value_function():
@@ -68,7 +72,7 @@ def test_cartpole_dynamics_function():
     vec_env = VectorizedDynamicsModelEnvironment(env, NUM_WALKERS, joint_model)
     vec_env.batch_reset()
 
-    fmc = FMC(vec_env, prediction_model=joint_model.prediction_model, config=config)
+    fmc = FMC(vec_env, value_model=joint_model.prediction_model, config=config)
     fmc.simulate(16)
 
 
@@ -77,7 +81,9 @@ def test_cartpole_exact_reward_and_values():
     vec_env = RayVectorizedEnvironment(env, n=NUM_WALKERS)
     vec_env.batch_reset()
 
-    config = FMCConfig(gamma=1, num_walkers=NUM_WALKERS, clone_strategy="cumulative_reward")
+    config = FMCConfig(
+        gamma=1, num_walkers=NUM_WALKERS, clone_strategy="cumulative_reward"
+    )
     fmc = FMC(vec_env, config=config)
 
     # no walkers will die from this, and the cumulative rewards/value estimation should be exact.
