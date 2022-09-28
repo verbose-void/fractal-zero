@@ -70,7 +70,11 @@ class OnlineFMCPolicyTrainer:
             weights = []
             for _, child_node, data in g.out_edges(node, data=True):
                 weights.append(child_node.visits)
-                action = data["action"]
+
+                # TODO... make this less hacky & support arbitrary action spaces.
+                action = data["action"].float()
+                action.requires_grad = True
+
                 actions.append(action)
             
             child_actions.append(actions)
@@ -84,8 +88,9 @@ class OnlineFMCPolicyTrainer:
 
         loss = 0
         for action_target, weight in zip(action_targets, normalized_action_weights):
-            print(action.shape, action_target.shape, weight)
-            loss += F.cross_entropy(action, action_target) * weight
+            # TODO: define a distance measure between actions and action targets
+            # for all kinds of action spaces.
+            loss += F.mse_loss(action, action_target) * weight
         return loss
 
     def train_on_latest_episode(self):
@@ -107,11 +112,14 @@ class OnlineFMCPolicyTrainer:
 
         # NOTE: loss for trajectories of weighted multi-target actions
         loss = 0
-        action_predictions = self.policy_model.forward(observations, argmax=False)
+        action_predictions = self.policy_model.forward(observations, argmax=True)
         for y, action_targets, action_weights in zip(action_predictions, actions, weights):
-            trajectory_loss = self._general_loss(y, action_targets, action_weights)
+            trajectory_loss = self._general_loss(y.unsqueeze(0), action_targets, action_weights)
             loss += trajectory_loss
-        loss /= len(observations)
+        print(loss)
+        loss = loss / len(observations)
+
+        print(loss)
 
         loss.backward()
         self.optimizer.step()
