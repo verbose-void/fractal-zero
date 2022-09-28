@@ -95,7 +95,7 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation = None, prune: bool = False):
+    def __init__(self, num_walkers: int, root_observation = None, prune: bool = True):
         self.num_walkers = num_walkers
         self.prune = prune
 

@@ -99,19 +99,9 @@ class OnlineFMCPolicyTrainer:
         observations, actions, weights = self._get_batch()
         assert len(observations) == len(actions) == len(weights)
 
-        # NOTE: loss for trajectories of single-target actions
-        # loss = 0
-        # for obs, action_targets in zip(observations, actions):
-        #     y = self.policy_model.forward(obs, argmax=False)
-        #     # all time steps equal in loss (maximizing average reward)
-        #     trajectory_loss = F.cross_entropy(y, action_targets)
-        #     loss += trajectory_loss
-        # # average over all trajectories included
-        # loss /= len(observations)
-
         # NOTE: loss for trajectories of weighted multi-target actions
         loss = 0
-        action_predictions = self.policy_model.forward(observations, argmax=True)
+        action_predictions = self.policy_model.forward(observations)
         for y, action_targets, action_weights in zip(action_predictions, actions, weights):
             trajectory_loss = self._general_loss(y.unsqueeze(0), action_targets, action_weights)
             loss += trajectory_loss
