@@ -1,11 +1,11 @@
-from typing import Union
+from typing import Callable, Union
 import torch
 import torch.nn.functional as F
 import gym
 import wandb
 
-from fractal_zero.data.replay_buffer import GameHistory
 from fractal_zero.search.fmc import FMC
+from fractal_zero.utils import get_space_distance_function
 
 from fractal_zero.vectorized_environment import RayVectorizedEnvironment, load_environment
 
@@ -21,6 +21,8 @@ class OnlineFMCPolicyTrainer:
 
         self.policy_model = policy_model
         self.optimizer = optimizer
+
+        self.action_distance_function: Callable = get_space_distance_function(self.env.action_space)
 
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
@@ -38,8 +40,6 @@ class OnlineFMCPolicyTrainer:
 
             observations.append(obs)
             actions.append(action)
-
-        self.last_episode_total_reward = path.total_reward
 
         x = torch.stack(observations).float()
         t = torch.tensor(actions)
@@ -86,11 +86,10 @@ class OnlineFMCPolicyTrainer:
     def _general_loss(self, action, action_targets, action_weights):
         normalized_action_weights = action_weights / action_weights.sum()
 
+        # TODO: vectorize better (if possible?)
         loss = 0
         for action_target, weight in zip(action_targets, normalized_action_weights):
-            # TODO: define a distance measure between actions and action targets
-            # for all kinds of action spaces.
-            loss += F.mse_loss(action, action_target) * weight
+            loss += self.action_distance_function(action, action_target) * weight
         return loss
 
     def train_on_latest_episode(self):
@@ -116,10 +115,7 @@ class OnlineFMCPolicyTrainer:
         for y, action_targets, action_weights in zip(action_predictions, actions, weights):
             trajectory_loss = self._general_loss(y.unsqueeze(0), action_targets, action_weights)
             loss += trajectory_loss
-        print(loss)
         loss = loss / len(observations)
-
-        print(loss)
 
         loss.backward()
         self.optimizer.step()
@@ -146,9 +142,12 @@ class OnlineFMCPolicyTrainer:
         if wandb.run is None:
             return
 
+        best_path = self.fmc.tree.best_path
+        last_episode_total_reward = best_path.total_reward
+
         wandb.log({
             "train/loss": train_loss,
-            "train/epsiode_reward": self.last_episode_total_reward,
+            "train/epsiode_reward": last_episode_total_reward,
         })
 
     def _log_last_eval_step(self, rewards):

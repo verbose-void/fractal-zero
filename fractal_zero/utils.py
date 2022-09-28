@@ -1,6 +1,7 @@
 import gym
 
 import torch
+import torch.nn.functional as F
 
 
 def get_space_shape(space):
@@ -22,3 +23,25 @@ def mean_min_max_dict(name: str, arr) -> dict:
         f"{name}/min": arr.min(),
         f"{name}/max": arr.max(),
     }
+
+
+def _cast_then_mse(y, t) -> float:
+    return F.mse_loss(y.float(), t.float())
+
+
+def get_space_distance_function(space: gym.Space):
+    # TODO: docstring
+
+    if isinstance(space, gym.spaces.Tuple):
+        raise NotImplementedError
+
+    if isinstance(space, gym.spaces.Dict):
+        raise NotImplementedError
+
+    if isinstance(space, gym.spaces.Box):
+        return F.mse_loss
+
+    if isinstance(space, gym.spaces.Discrete):
+        return _cast_then_mse
+
+    raise NotImplementedError
