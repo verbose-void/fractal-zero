@@ -5,12 +5,14 @@ from uuid import UUID, uuid4
 
 
 class StateNode:
-    def __init__(self, observation, reward, num_child_walkers: int = 1, terminal: bool = False):
+    def __init__(
+        self, observation, reward, num_child_walkers: int = 1, terminal: bool = False
+    ):
         self.id = uuid4()
         self.observation = observation
         self.reward = reward
         self.terminal = terminal
-        
+
         self.num_child_walkers = num_child_walkers
         self.visits = 1
 
@@ -59,7 +61,7 @@ class Path:
                 # TODO: force prune when the number of visits is reasonably low?
 
                 self.g.remove_node(state)
-            
+
             # don't copy, just update reference
             self.ordered_states[i] = new_state
 
@@ -95,18 +97,25 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation = None, prune: bool = True):
+    def __init__(self, num_walkers: int, root_observation=None, prune: bool = True):
         self.num_walkers = num_walkers
         self.prune = prune
 
-        self.root = StateNode(root_observation, reward=0, num_child_walkers=self.num_walkers, terminal=False)
+        self.root = StateNode(
+            root_observation,
+            reward=0,
+            num_child_walkers=self.num_walkers,
+            terminal=False,
+        )
 
         self.g = nx.DiGraph()
         self.g.add_node(self.root)
 
         self.walker_paths = [Path(self.root, self.g) for _ in range(self.num_walkers)]
 
-    def build_next_level(self, actions: Sequence, new_observations: Sequence, rewards: Sequence):
+    def build_next_level(
+        self, actions: Sequence, new_observations: Sequence, rewards: Sequence
+    ):
         assert len(actions) == len(new_observations) == len(rewards) == self.num_walkers
 
         # TODO: how can we detect duplicate observations / action transitions to save memory? (might not be super important)

@@ -21,12 +21,14 @@ def test_tree():
         assert tree.root.num_child_walkers == n
 
     # all partners with 0th walker
-    partners = np.zeros(n, dtype=int)  
+    partners = np.zeros(n, dtype=int)
 
     # only 1 walker clones to the 0th walker
     clone_mask = np.zeros(n, dtype=bool)
     clone_mask[1] = 1
 
     tree.clone(partners, clone_mask)
-    assert tree.g.degree(tree.root) == n - 1  # 1 walker was fully cloned away and pruned.
+    assert (
+        tree.g.degree(tree.root) == n - 1
+    )  # 1 walker was fully cloned away and pruned.
     assert tree.root.num_child_walkers == n

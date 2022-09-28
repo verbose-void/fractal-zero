@@ -19,7 +19,7 @@ class FullyConnectedPredictionModel(torch.nn.Module):
         self.policy_loss = None  # TODO
         self.value_loss = F.cross_entropy
 
-    def forward(self, embedding):
+    def forward(self, embedding, with_randomness: bool = False):
         policy_logits = self.policy_head(
             embedding
         )  # TODO: wtf happens with continuous action spaces?

@@ -58,7 +58,7 @@ class FMC:
         self._validate_config()
 
         # TODO: maybe this reset and game tree construction should be called more cautiously.
-        self.observations = self.vectorized_environment.batch_reset()          
+        self.observations = self.vectorized_environment.batch_reset()
 
         if self.config.track_game_tree:
             root_observation = self.observations[0]
@@ -104,7 +104,10 @@ class FMC:
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
             )
 
-        if self.value_model is None and self.config.clone_strategy == "predicted_values":
+        if (
+            self.value_model is None
+            and self.config.clone_strategy == "predicted_values"
+        ):
             raise ValueError(
                 "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
             )
@@ -129,9 +132,12 @@ class FMC:
 
         self._assign_actions()
 
-        self.observations, self.rewards, self.dones, _ = self.vectorized_environment.batch_step(
-            self.batch_actions
-        )
+        (
+            self.observations,
+            self.rewards,
+            self.dones,
+            _,
+        ) = self.vectorized_environment.batch_step(self.batch_actions)
 
         if self.value_model is not None:
             self.predicted_values = self.value_model.forward(self.observations)
@@ -154,7 +160,12 @@ class FMC:
             dtype=float,
         )
 
-        it = tqdm(range(self.k), desc="Simulating with FMC", total=self.k, disable=not use_tqdm)
+        it = tqdm(
+            range(self.k),
+            desc="Simulating with FMC",
+            total=self.k,
+            disable=not use_tqdm,
+        )
         for self.simulation_iteration in it:
             self._perturbate()
             self._prepare_clone_variables()
@@ -185,8 +196,9 @@ class FMC:
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
-
-        random_parsed_actions = self.vectorized_environment.batched_action_space_sample()
+        random_parsed_actions = (
+            self.vectorized_environment.batched_action_space_sample()
+        )
         random_actions = torch.tensor(random_parsed_actions, device=self.device)
 
         if self.policy_model and self.config.use_policy_for_action_selection:
@@ -194,7 +206,9 @@ class FMC:
             use_epsilon_greedy = True
 
             with_randomness = not use_epsilon_greedy
-            policy_actions = self.policy_model.forward(self.observations, with_randomness=with_randomness)
+            policy_actions = self.policy_model.forward(
+                self.observations, with_randomness=with_randomness
+            )
             # policy_parsed_actions = self.policy_model.parse_actions(self.actions)
 
             if use_epsilon_greedy:
@@ -381,7 +395,7 @@ class FMC:
 
     @property
     def root_value(self):
-        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average 
+        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average
         value of each child node to the root with respect to the "visit count".
         """
 

@@ -6,9 +6,15 @@ import gym
 import wandb
 
 from fractal_zero.search.fmc import FMC
-from fractal_zero.utils import get_space_distance_function, kl_divergence_of_model_paramters
+from fractal_zero.utils import (
+    get_space_distance_function,
+    kl_divergence_of_model_paramters,
+)
 
-from fractal_zero.vectorized_environment import RayVectorizedEnvironment, load_environment
+from fractal_zero.vectorized_environment import (
+    RayVectorizedEnvironment,
+    load_environment,
+)
 
 
 class OnlineFMCPolicyTrainer:
@@ -16,19 +22,27 @@ class OnlineFMCPolicyTrainer:
     weights are used during the search process. So the data is generated, the model is trained, and the cycle continues.
     """
 
-    def __init__(self, env: Union[str, gym.Env], policy_model: torch.nn.Module, optimizer: torch.optim.Optimizer, num_walkers: int):
+    def __init__(
+        self,
+        env: Union[str, gym.Env],
+        policy_model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        num_walkers: int,
+    ):
         self.env = load_environment(env)
         self.vec_env = RayVectorizedEnvironment(env, num_walkers)
 
         self.policy_model = policy_model
         self.optimizer = optimizer
 
-        self.action_distance_function: Callable = get_space_distance_function(self.env.action_space)
+        self.action_distance_function: Callable = get_space_distance_function(
+            self.env.action_space
+        )
 
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
 
-        self.fmc = FMC(self.vec_env) #, policy_model=self.policy_model)
+        self.fmc = FMC(self.vec_env)  # , policy_model=self.policy_model)
         self.fmc.simulate(max_steps)
 
     def _get_best_only_batch(self):
@@ -77,7 +91,7 @@ class OnlineFMCPolicyTrainer:
                 action.requires_grad = True
 
                 actions.append(action)
-            
+
             child_actions.append(actions)
             child_weights.append(torch.tensor(weights).float())
 
@@ -106,8 +120,12 @@ class OnlineFMCPolicyTrainer:
         # NOTE: loss for trajectories of weighted multi-target actions
         loss = 0
         action_predictions = self.policy_model.forward(observations)
-        for y, action_targets, action_weights in zip(action_predictions, actions, weights):
-            trajectory_loss = self._general_loss(y.unsqueeze(0), action_targets, action_weights)
+        for y, action_targets, action_weights in zip(
+            action_predictions, actions, weights
+        ):
+            trajectory_loss = self._general_loss(
+                y.unsqueeze(0), action_targets, action_weights
+            )
             loss += trajectory_loss
         loss = loss / len(observations)
 
@@ -139,19 +157,24 @@ class OnlineFMCPolicyTrainer:
         best_path = self.fmc.tree.best_path
         last_episode_total_reward = best_path.total_reward
 
-        kl_div = kl_divergence_of_model_paramters(self.params_before, self.policy_model.parameters())
+        kl_div = kl_divergence_of_model_paramters(
+            self.params_before, self.policy_model.parameters()
+        )
 
-        wandb.log({
-            "train/loss": train_loss,
-            "train/epsiode_reward": last_episode_total_reward,
-            "train/policy_kl_div": kl_div,
-        })
+        wandb.log(
+            {
+                "train/loss": train_loss,
+                "train/epsiode_reward": last_episode_total_reward,
+                "train/policy_kl_div": kl_div,
+            }
+        )
 
     def _log_last_eval_step(self, rewards):
         if wandb.run is None:
             return
 
-        wandb.log({
-            "eval/total_rewards": sum(rewards),
-        })
-        
+        wandb.log(
+            {
+                "eval/total_rewards": sum(rewards),
+            }
+        )
