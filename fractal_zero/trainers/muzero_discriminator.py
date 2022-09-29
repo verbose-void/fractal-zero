@@ -155,16 +155,16 @@ class FractalMuZeroDiscriminatorTrainer:
     def representation(self):
         return self.model_environment.representation
 
-    def _get_agent_trajectory(self, max_steps: int):
+    def _get_agent_trajectory(self, max_steps: int, render: bool = False):
         self.model_environment.eval()
 
         obs = self.actual_environment.reset()
         self.model_environment.set_all_states(obs)
 
         # TODO: maybe incorporate policy model? or maybe we can just use FMC to search?
-        self.fmc = FMC(self.model_environment)
+        self.fmc = FMC(self.model_environment, balance=3)
 
-        lookahead_steps = 16
+        lookahead_steps = 1
 
         observations = []
         actions = []
@@ -181,6 +181,9 @@ class FractalMuZeroDiscriminatorTrainer:
 
             obs, reward, done, info = self.actual_environment.step(action)
             self.model_environment.set_all_states(obs)
+
+            if render:
+                self.actual_environment.render()
 
             if done:
                 break
