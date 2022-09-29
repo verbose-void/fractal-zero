@@ -3,6 +3,7 @@ import torch
 import numpy as np
 
 from typing import Callable, Union
+from fractal_zero.data.expert_dataset import ExpertDataset
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.search.fmc import FMC
 
@@ -90,6 +91,7 @@ class FractalMuZeroDiscriminatorTrainer:
         self, 
         env: Union[str, gym.Env],
         model_environment: FMZGModel,
+        expert_dataset: ExpertDataset,
     ):
         # TODO: vectorize the actual environment?
         self.actual_environment = load_environment(env)
@@ -98,7 +100,7 @@ class FractalMuZeroDiscriminatorTrainer:
         # TODO: refac somehow...?
         self.model_environment.action_space = self.actual_environment.action_space
 
-        self.expert_dataset = None  # TODO
+        self.expert_dataset = expert_dataset
 
     def _get_agent_trajectory(self, max_steps: int):
         obs = self.actual_environment.reset()
@@ -136,5 +138,7 @@ class FractalMuZeroDiscriminatorTrainer:
 
     def train_step(self, max_steps: int):
         agent_trajectory = self._get_agent_trajectory(max_steps)
-
         print(agent_trajectory)
+
+        expert_trajectory = self.expert_dataset.sample_trajectory(max_steps)
+        print(expert_trajectory)
