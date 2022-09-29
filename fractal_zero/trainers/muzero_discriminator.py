@@ -58,7 +58,7 @@ class FMZGModel(VectorizedEnvironment):
             observation = torch.tensor(observation, dtype=float)
 
         self.representation.eval()
-        self.initial_states = self.representation.forward(observation)
+        self.initial_states = self.representation.forward(observation.float())
 
         # duplicate initial state representation to all walkers
         self.states = torch.zeros((self.n, *self.initial_states.shape))
@@ -170,8 +170,8 @@ class FractalMuZeroDiscriminatorTrainer:
         expert_x, expert_y = self.expert_dataset.sample_trajectory(max_steps)
 
         # get hidden representation of the observations as states
-        agent_states = self.representation.forward(agent_x)
-        expert_states = self.representation.forward(expert_x)
+        agent_states = self.representation.forward(agent_x.float())
+        expert_states = self.representation.forward(expert_x.float())
 
         # add the hidden representations with the action embeddings (TODO: de-duplciate this code, it exists
         # within the FMZG model too.)
