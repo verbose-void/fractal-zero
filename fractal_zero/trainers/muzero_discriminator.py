@@ -106,6 +106,7 @@ class FMZGModel(VectorizedEnvironment):
 
         steps = embedded_actions.shape[0]
         confusions = torch.zeros(steps, dtype=float)
+        self_consistencies = torch.zeros(steps, dtype=float)
         latent_state = observation_representations[0]
 
         for step in range(steps):
@@ -118,8 +119,11 @@ class FMZGModel(VectorizedEnvironment):
             confusion = self.discriminator.forward(x)
             confusions[step] = confusion
 
-        # TODO: self consistentcy measure return
-        return confusions
+            # self consistency is how well the latent representations match with the representation function
+            consistency = F.mse_loss(latent_state, observation_representations[step])
+            self_consistencies[step] = consistency
+
+        return confusions, self_consistencies.mean()
 
 
 
@@ -221,20 +225,27 @@ class FractalMuZeroDiscriminatorTrainer:
         assert len(agent_x) == len(agent_y)
         assert len(expert_x) == len(expert_y)
 
-        agent_confusions = self.model_environment.discriminate_single_trajectory(agent_x.float(), agent_y.float())
-        expert_confusions = self.model_environment.discriminate_single_trajectory(expert_x.float(), expert_y.float())
+        agent_confusions, agent_consistency = self.model_environment.discriminate_single_trajectory(
+            agent_x.float(), 
+            agent_y.float(),
+        )
+        expert_confusions, expert_consistency = self.model_environment.discriminate_single_trajectory(
+            expert_x.float(), 
+            expert_y.float(),
+        )
 
         assert len(agent_confusions) == len(agent_x)
 
         agent_t = torch.zeros(agent_x.shape[0], dtype=float)
         expert_t = torch.ones(expert_x.shape[0], dtype=float)
 
-        print(agent_confusions)
-        print(expert_confusions)
-
         loss = 0
+
         loss += F.mse_loss(agent_confusions, agent_t)
         loss += F.mse_loss(expert_confusions, expert_t)
+
+        # TODO: config for self consistency loss
+        # loss += (agent_consistency + expert_consistency) / 2
         
         loss.backward()
         self.optimizer.step()
