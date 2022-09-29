@@ -34,8 +34,16 @@ def mean_min_max_dict(name: str, arr) -> dict:
     }
 
 
+def _float_cast(vec):
+    if isinstance(vec, torch.Tensor):
+        return vec.float()
+    return torch.tensor(vec, dtype=float).float()
+
+
 def _cast_then_mse(y, t) -> float:
-    return F.mse_loss(y.float(), t.float())
+    y = _float_cast(y)
+    t = _float_cast(t)
+    return F.mse_loss(y, t)
 
 
 def get_space_distance_function(space: gym.Space):
@@ -45,10 +53,29 @@ def get_space_distance_function(space: gym.Space):
         raise NotImplementedError
 
     if isinstance(space, gym.spaces.Dict):
-        raise NotImplementedError
+
+        # build reduce function
+
+        funcs = {}
+        for key, sub_space in space.items():
+            sub_space_dist_func = get_space_distance_function(sub_space)
+            funcs[key] = sub_space_dist_func
+
+        def _composite_distance(y, t):
+            # TODO: assert same space spec?
+
+            total = 0
+            for key, func in funcs.items():
+                y_value = y[key]
+                t_value = t[key]
+                total += func(y_value, t_value)
+
+            return total  # TODO: normalize?
+
+        return _composite_distance
 
     if isinstance(space, gym.spaces.Box):
-        return F.mse_loss
+        return _cast_then_mse
 
     if isinstance(space, gym.spaces.Discrete):
         return _cast_then_mse
