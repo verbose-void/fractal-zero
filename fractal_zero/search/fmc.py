@@ -98,11 +98,18 @@ class FMC:
             else "cumulative_reward",
         )
 
-    def _validate_config(self):
+    def _validate_num_walkers(self):
         if self.config.num_walkers != self.vectorized_environment.n:
             raise ValueError(
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
             )
+
+        actual_walkers = self.vectorized_environment.states.shape[0]
+        if self.config.num_walkers != actual_walkers:
+            raise ValueError(f"Expected the vectorized environment's internal state to have {self.config.num_walkers} walkers. Instead, got {actual_walkers}.")
+
+    def _validate_config(self):
+        self._validate_num_walkers()
 
         if (
             self.value_model is None
@@ -167,6 +174,9 @@ class FMC:
             disable=not use_tqdm,
         )
         for self.simulation_iteration in it:
+            # in case the vectorized environment was used to perform another operation.
+            self._validate_num_walkers()
+
             self._perturbate()
             self._prepare_clone_variables()
             self._backpropagate_reward_buffer()
