@@ -118,7 +118,7 @@ class FractalMuZeroDiscriminatorTrainer:
     def representation(self):
         return self.model_environment.representation
 
-    def _get_agent_trajectory(self, max_steps: int):
+    def _get_agent_trajectory(self, max_steps: int, render: bool = False):
         obs = self.actual_environment.reset()
         self.model_environment.set_all_states(obs)
 
@@ -142,6 +142,9 @@ class FractalMuZeroDiscriminatorTrainer:
 
             obs, reward, done, info = self.actual_environment.step(action)
             self.model_environment.set_all_states(obs)
+
+            if render:
+                self.actual_environment.render()
 
             if done:
                 break
