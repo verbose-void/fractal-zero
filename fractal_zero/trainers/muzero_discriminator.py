@@ -180,7 +180,7 @@ class FractalMuZeroDiscriminatorTrainer:
         x = torch.cat((agent_samples, expert_samples)).float()
         t = torch.tensor(([0] * agent_samples.shape[0]) + [1] * expert_samples.shape[0]).float()
 
-        discriminator_confusions = self.discriminator.forward(x)
+        discriminator_confusions = self.discriminator.forward(x).squeeze(-1)
         loss = F.mse_loss(discriminator_confusions, t)
         
         loss.backward()
