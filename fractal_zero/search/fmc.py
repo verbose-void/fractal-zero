@@ -48,13 +48,14 @@ class FMC:
         value_model: torch.nn.Module = None,
         config: FMCConfig = None,
         verbose: bool = False,
+        **kwargs,
     ):
         self.vectorized_environment = vectorized_environment
         self.policy_model = policy_model
         self.value_model = value_model
         self.verbose = verbose
 
-        self.config = self._build_default_config() if config is None else config
+        self.config = self._build_default_config(**kwargs) if config is None else config
         self._validate_config()
 
         # TODO: maybe this reset and game tree construction should be called more cautiously.
@@ -85,7 +86,7 @@ class FMC:
         )
         self.root_actions = None
 
-    def _build_default_config(self) -> FMCConfig:
+    def _build_default_config(self, **kwargs) -> FMCConfig:
         use_actual_env = not isinstance(
             self.vectorized_environment, VectorizedDynamicsModelEnvironment
         )
@@ -96,6 +97,7 @@ class FMC:
             clone_strategy="predicted_values"
             if self.value_model is not None
             else "cumulative_reward",
+            **kwargs,
         )
 
     def _validate_num_walkers(self):
@@ -118,6 +120,9 @@ class FMC:
             raise ValueError(
                 "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
             )
+
+        if self.value_model is not None or self.config.clone_strategy == "predicted_values":
+            warn("Using FMC with a value function is not recommended!")
 
     @property
     def num_walkers(self) -> int:
@@ -199,7 +204,11 @@ class FMC:
 
         # TODO: experiment with these
         if greedy_action:
-            return self._get_highest_value_action()
+            if self.config.clone_strategy == "predicted_values":
+                return self._get_highest_value_action()
+
+            return self._get_highest_cumulative_action()
+
         return self._get_action_with_highest_clone_receives()
 
     @torch.no_grad()
@@ -413,7 +422,12 @@ class FMC:
         return weighted_values.sum() / self.visit_buffer.sum()
 
     @torch.no_grad()
-    def _get_highest_value_action(self):
+    def _get_highest_cumulative_action(self):
+        best_walker = torch.argmax(self.rewards)
+        return self.root_actions[best_walker].cpu().numpy()
+
+    @torch.no_grad()
+    def _get_highest_value_action(self):  # TODO: DELETE THIS?
         """The highest value action corresponds to the walker whom has the highest average estimated value."""
 
         self.walker_values = self.value_sum_buffer / self.visit_buffer
