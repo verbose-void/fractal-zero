@@ -85,14 +85,16 @@ class FMC:
     def _build_default_config(self) -> FMCConfig:
         return FMCConfig(num_walkers=self.vectorized_environment.n)
 
-    def _validate_config(self):
-        if self.config.use_policy_for_action_selection:
-            raise NotImplementedError("Using policy functions to sample walker actions not yet supported.")
-
+    def _validate_num_walkers(self):
         if self.config.num_walkers != self.vectorized_environment.n:
             raise ValueError(
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
             )
+
+    def _validate_config(self):
+        if self.config.use_policy_for_action_selection:
+            raise NotImplementedError("Using policy functions to sample walker actions not yet supported.")
+        self._validate_num_walkers()
 
     @property
     def num_walkers(self) -> int:

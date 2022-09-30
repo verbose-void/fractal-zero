@@ -9,7 +9,8 @@ from fractal_zero.loss.space_loss import get_space_loss
 from fractal_zero.search.fmc import FMC
 from fractal_zero.config import FMCConfig
 from fractal_zero.utils import (
-    kl_divergence_of_model_paramters,
+    dist_of_model_paramters,
+    parameters_norm,
 )
 
 from fractal_zero.vectorized_environment import (
@@ -186,15 +187,16 @@ class OnlineFMCPolicyTrainer:
         best_path = self.fmc.tree.best_path
         last_episode_total_reward = best_path.total_reward
 
-        kl_div = kl_divergence_of_model_paramters(
-            self.params_before, self.policy_model.parameters()
-        )
+        current_params = list(self.policy_model.parameters())
+        param_dist = dist_of_model_paramters(self.params_before, current_params)
+        param_norm = parameters_norm(current_params)
 
         wandb.log(
             {
                 "train/loss": train_loss,
                 "train/epsiode_reward": last_episode_total_reward,
-                "train/policy_kl_div": kl_div,
+                "parameters/policy_norm": param_norm,
+                "parameters/policy_l2_distance": param_dist,
             }
         )
 
