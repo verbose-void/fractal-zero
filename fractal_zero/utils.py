@@ -64,13 +64,15 @@ def get_space_distance_function(space: gym.Space):
         def _composite_distance(y, t):
             # TODO: assert same space spec?
 
+            c = 0
             total = 0
             for key, func in funcs.items():
                 y_value = y[key]
                 t_value = t[key]
                 total += func(y_value, t_value)
+                c += 1
 
-            return total  # TODO: normalize?
+            return total / c
 
         return _composite_distance
 

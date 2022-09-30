@@ -131,7 +131,7 @@ class OnlineFMCPolicyTrainer:
         self._log_last_train_step(loss.item())
         return loss.item()
 
-    def evaluate_policy(self, max_steps: int):
+    def evaluate_policy(self, max_steps: int, render: bool = False):
         self.policy_model.eval()
 
         obs = self.env.reset()
@@ -140,9 +140,15 @@ class OnlineFMCPolicyTrainer:
 
         for _ in range(max_steps):
             action = self.policy_model.forward(obs)
-            action = self.policy_model.parse_actions(action)
+            action = self.policy_model.parse_action(action)
             obs, reward, done, info = self.env.step(action)
             rewards.append(reward)
+
+            if render:
+                self.env.render()
+
+            if done:
+                break
 
         self._log_last_eval_step(rewards)
 
