@@ -79,25 +79,20 @@ class OnlineFMCPolicyTrainer:
 
         g = self.fmc.tree.g
         for node in g.nodes:
-            obs = torch.tensor(node.observation).float()
-            observations.append(obs)
+            observations.append(node.observation)
 
             actions = []
             weights = []
             for _, child_node, data in g.out_edges(node, data=True):
                 weights.append(child_node.visits)
 
-                # TODO... make this less hacky & support arbitrary action spaces.
-                action = data["action"].float()
-                action.requires_grad = True
-
+                action = data["action"]
                 actions.append(action)
 
             child_actions.append(actions)
             child_weights.append(torch.tensor(weights).float())
 
-        x = torch.stack(observations).float()
-        return x, child_actions, child_weights
+        return observations, child_actions, child_weights
 
     def _general_loss(self, action, action_targets, action_weights):
         normalized_action_weights = action_weights / action_weights.sum()
@@ -125,7 +120,7 @@ class OnlineFMCPolicyTrainer:
             action_predictions, actions, weights
         ):
             trajectory_loss = self._general_loss(
-                y.unsqueeze(0), action_targets, action_weights
+                y, action_targets, action_weights
             )
             loss += trajectory_loss
         loss = loss / len(observations)
