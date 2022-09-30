@@ -426,7 +426,7 @@ class FMC:
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
         return vector
 
-    def _clone_list(self, l: List):
+    def _clone_list(self, l: List, copy: bool=False):
         new_list = []
         for i in range(self.num_walkers):
             do_clone = self.clone_mask[i]
@@ -434,7 +434,10 @@ class FMC:
 
             if do_clone:
                 # NOTE: may not need to deepcopy.
-                new_list.append(deepcopy(l[partner]))
+                if copy:
+                    new_list.append(deepcopy(l[partner]))
+                else:
+                    new_list.append(l[partner])
             else:
                 new_list.append(l[i])
         return new_list

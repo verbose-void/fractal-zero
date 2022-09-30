@@ -78,8 +78,10 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
     def __init__(self, env: Union[str, gym.Env], n: int, observation_encoder: Callable=None):
         super().__init__(env, n)
 
+        # TODO: explain
+        self.observation_encoder = observation_encoder if observation_encoder else torch.tensor
+        
         self.envs = [_RayWrappedEnvironment.remote(env) for _ in range(n)]
-        self.observation_encoder = observation_encoder  # TODO: explain
 
     def batch_reset(self, *args, **kwargs):
         return ray.get([env.reset.remote(*args, **kwargs) for env in self.envs])
@@ -103,13 +105,8 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             rewards.append(rew)
             dones.append(done)
             infos.append(info)
-
-        # TODO: these shapes and such should be cleaner to understand and more standardized throughout the code.
-
-        if self.observation_encoder:
-            states = self.observation_encoder(observations)
-        else:
-            states = observations
+        
+        states = self.observation_encoder(observations)
 
         return (
             states,
