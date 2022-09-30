@@ -25,6 +25,10 @@ class SpaceLoss(ABC):
 
 class DiscreteSpaceLoss(SpaceLoss):
     def __init__(self, discrete_space: spaces.Discrete, loss_func=None):
+
+        # TODO: can we auto-determine the kind of loss func? 
+        # TODO: ie. if the incoming sample is obviously logits, maybe
+        # TODO: we use F.cross_entropy automatically?
         self.loss_func = loss_func if loss_func else F.mse_loss
 
         if not isinstance(discrete_space, spaces.Discrete):
@@ -88,19 +92,8 @@ class DictSpaceLoss(SpaceLoss):
     def _build_funcs(self):
         self.funcs = {}
         for key, subspace in self.space.items():
-            subspace_loss_func = self.loss_spec.get(key, None)
-
-            if isinstance(subspace, spaces.Dict):
-                subspace_loss_class = DictSpaceLoss
-                subspace_kwargs = {"loss_spec": subspace_loss_func}
-            elif type(subspace) not in LOSS_CLASSES:
-                raise ValueError(f"Subspace \"{subspace}\" is not supported.")
-            else:
-                subspace_loss_class = LOSS_CLASSES[type(subspace)]
-                subspace_kwargs = {"loss_func": subspace_loss_func}
-                
-            subspace_criterion = subspace_loss_class(subspace, **subspace_kwargs)
-            self.funcs[key] = subspace_criterion
+            subspec = self.loss_spec.get(key, None)
+            self.funcs[key] = get_space_loss(subspace, subspec)
 
     def _dict_loss(self, y, t):
         loss = 0
@@ -130,3 +123,8 @@ class DictSpaceLoss(SpaceLoss):
 
         return self._dict_loss(y, t)
 
+
+def get_space_loss(space: spaces.Space, spec: Dict=None) -> SpaceLoss:
+    if isinstance(space, spaces.Dict):
+        return DictSpaceLoss(space, loss_spec=spec)
+    return LOSS_CLASSES[type(space)](space, loss_func=spec)

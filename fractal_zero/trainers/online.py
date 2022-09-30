@@ -1,13 +1,13 @@
 from copy import deepcopy
-from typing import Callable, Union
+from typing import Callable, Dict, Union
 import torch
 import torch.nn.functional as F
 import gym
 import wandb
 
+from fractal_zero.loss.space_loss import get_space_loss
 from fractal_zero.search.fmc import FMC
 from fractal_zero.utils import (
-    get_space_distance_function,
     kl_divergence_of_model_paramters,
 )
 
@@ -29,16 +29,17 @@ class OnlineFMCPolicyTrainer:
         optimizer: torch.optim.Optimizer,
         num_walkers: int,
         observation_encoder: Callable = None,
+        loss_spec = None,
     ):
         self.env = load_environment(env)
         self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
 
         self.policy_model = policy_model
         self.optimizer = optimizer
+        self.action_loss = get_space_loss(self.env.action_space, spec=loss_spec)
 
-        self.action_distance_function: Callable = get_space_distance_function(
-            self.env.action_space
-        )
+        self.most_reward = float("-inf")
+        self.best_model = None
 
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
@@ -54,11 +55,12 @@ class OnlineFMCPolicyTrainer:
         for state, action in path:
             # obs = torch.tensor(state.observation)
             observations.append(state.observation)
-            actions.append(action)
+            actions.append([action])
 
         # x = torch.stack(observations).float()
         # t = torch.tensor(actions)
         # return [x], [t]
+
         return observations, actions
 
     def _get_batch(self):
@@ -66,7 +68,7 @@ class OnlineFMCPolicyTrainer:
             raise ValueError("FMC is not tracking walker paths.")
 
         # TODO: config
-        best_only = False
+        best_only = True
 
         if best_only:
             return self._get_best_only_batch()
@@ -94,13 +96,14 @@ class OnlineFMCPolicyTrainer:
 
         return observations, child_actions, child_weights
 
-    def _general_loss(self, action, action_targets, action_weights):
-        normalized_action_weights = action_weights / action_weights.sum()
+    def _general_loss(self, action, action_targets):#, action_weights):
+        # normalized_action_weights = action_weights / action_weights.sum()
 
         # TODO: vectorize better (if possible?)
         loss = 0
-        for action_target, weight in zip(action_targets, normalized_action_weights):
-            loss += self.action_distance_function(action, action_target) * weight
+        # for action_target, weight in zip(action_targets, normalized_action_weights):
+        for action_target in action_targets:
+            loss += self.action_loss(action, action_target)
         return loss
 
     def train_on_latest_episode(self):
@@ -110,17 +113,20 @@ class OnlineFMCPolicyTrainer:
         # TODO: make more efficient somehow?
         self.params_before = deepcopy(list(self.policy_model.parameters()))
 
-        observations, actions, weights = self._get_batch()
-        assert len(observations) == len(actions) == len(weights)
+        observations, actions = self._get_batch()
+        # assert len(observations) == len(actions) == len(weights)
+        assert len(observations) == len(actions)
 
         # NOTE: loss for trajectories of weighted multi-target actions
         loss = 0
         action_predictions = self.policy_model.forward(observations)
-        for y, action_targets, action_weights in zip(
-            action_predictions, actions, weights
+        # for y, action_targets, action_weights in zip(
+            # action_predictions, actions, weights
+        for y, action_targets in zip(
+            action_predictions, actions
         ):
             trajectory_loss = self._general_loss(
-                y, action_targets, action_weights
+                y, action_targets#, action_weights
             )
             loss += trajectory_loss
         loss = loss / len(observations)
@@ -131,16 +137,18 @@ class OnlineFMCPolicyTrainer:
         self._log_last_train_step(loss.item())
         return loss.item()
 
-    def evaluate_policy(self, max_steps: int, render: bool = False):
-        self.policy_model.eval()
+    def evaluate_policy(self, max_steps: int, render: bool = False, evaluate_best_policy: bool = False):
+        policy = self.best_model if evaluate_best_policy else self.policy_model
+
+        policy.eval()
 
         obs = self.env.reset()
 
         rewards = []
 
         for _ in range(max_steps):
-            action = self.policy_model.forward(obs)
-            action = self.policy_model.parse_action(action)
+            action = policy.forward(obs)
+            action = policy.parse_action(action)
             obs, reward, done, info = self.env.step(action)
             rewards.append(reward)
 
@@ -149,6 +157,12 @@ class OnlineFMCPolicyTrainer:
 
             if done:
                 break
+
+        if not evaluate_best_policy:
+            total_reward = sum(rewards)
+            if total_reward > self.most_reward:
+                self.most_reward = total_reward
+                self.best_model = deepcopy(self.policy_model)
 
         self._log_last_eval_step(rewards)
 
