@@ -44,14 +44,10 @@ class FMC:
     def __init__(
         self,
         vectorized_environment: VectorizedEnvironment,
-        policy_model: torch.nn.Module = None,
-        value_model: torch.nn.Module = None,
         config: FMCConfig = None,
         verbose: bool = False,
     ):
         self.vectorized_environment = vectorized_environment
-        self.policy_model = policy_model
-        self.value_model = value_model
         self.verbose = verbose
 
         self.config = self._build_default_config() if config is None else config
@@ -83,36 +79,19 @@ class FMC:
             size=(self.num_walkers, 1),
             dtype=int,
         )
+        self.cumulative_rewards = torch.zeros(size=(self.num_walkers, 1), dtype=float)
         self.root_actions = None
 
     def _build_default_config(self) -> FMCConfig:
-        use_actual_env = not isinstance(
-            self.vectorized_environment, VectorizedDynamicsModelEnvironment
-        )
-
-        return FMCConfig(
-            num_walkers=self.vectorized_environment.n,
-            search_using_actual_environment=use_actual_env,
-            clone_strategy="predicted_values"
-            if self.value_model is not None
-            else "cumulative_reward",
-        )
+        return FMCConfig(num_walkers=self.vectorized_environment.n)
 
     def _validate_config(self):
+        if self.config.use_policy_for_action_selection:
+            raise NotImplementedError("Using policy functions to sample walker actions not yet supported.")
+
         if self.config.num_walkers != self.vectorized_environment.n:
             raise ValueError(
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
-            )
-
-        if self.value_model is not None:
-            raise ValueError("Value models are no longer supported.")
-
-        if (
-            self.value_model is None
-            and self.config.clone_strategy == "predicted_values"
-        ):
-            raise ValueError(
-                "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
             )
 
     @property
@@ -137,7 +116,7 @@ class FMC:
             _,
         ) = self.vectorized_environment.batch_step(self.actions)
 
-        self.reward_buffer[:, self.simulation_iteration] = self.rewards
+        self.cumulative_rewards += self.rewards
 
         if self.tree:
             self.tree.build_next_level(self.actions, self.observations, self.rewards)
@@ -149,12 +128,6 @@ class FMC:
         self.k = k
         assert self.k > 0
 
-        # NOTE: can't exist in reset.
-        self.reward_buffer = torch.zeros(
-            size=(self.num_walkers, self.k, 1),
-            dtype=float,
-        )
-
         it = tqdm(
             range(self.k),
             desc="Simulating with FMC",
@@ -164,7 +137,6 @@ class FMC:
         for self.simulation_iteration in it:
             self._perturbate()
             self._prepare_clone_variables()
-            self._backpropagate_reward_buffer()
             self._execute_cloning()
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
@@ -182,9 +154,11 @@ class FMC:
             commit=False,
         )
 
-        # TODO: experiment with these
-        if greedy_action:
-            return self._get_highest_value_action()
+        return self.get_root_action(greedy_action)
+
+    def get_root_action(self, greedy: bool):
+        if greedy:
+            return self._get_action_with_highest_cumulative_reward()
         return self._get_action_with_highest_clone_receives()
 
     @torch.no_grad()
@@ -192,34 +166,6 @@ class FMC:
         """Each walker picks an action to advance it's state."""
 
         self.actions = self.vectorized_environment.batched_action_space_sample()
-        # random_actions = torch.tensor(random_parsed_actions, device=self.device)
-
-        if self.policy_model and self.config.use_policy_for_action_selection:
-            # # TODO: config
-            # use_epsilon_greedy = True
-
-            # with_randomness = not use_epsilon_greedy
-            # policy_actions = self.policy_model.forward(
-            #     self.observations, with_randomness=with_randomness
-            # )
-            # # policy_parsed_actions = self.policy_model.parse_actions(self.actions)
-
-            # if use_epsilon_greedy:
-            #     # TODO: epsilon param
-            #     greedy_mask = torch.rand(self.num_walkers) < 0.1
-            # else:
-            #     greedy_mask = torch.ones(self.num_walkers, dtype=bool)
-
-            # self.actions = torch.where(greedy_mask, policy_actions, random_actions)
-            # self.parsed_actions = self.policy_model.parse_actions(self.actions)
-            raise NotImplementedError
-
-        # else:
-            # use pure random actions if no policy model is provided.
-            # self.parsed_actions = random_parsed_actions
-            # self.actions = random_actions.unsqueeze(-1)
-            # self.actions = random_actions
-
         if self.root_actions is None:
             self.root_actions = deepcopy(self.actions)
 
@@ -252,14 +198,10 @@ class FMC:
         # TODO EXPERIMENT: should we be using the value estimates? or should we be using the value buffer?
         # or should we be using the cumulative rewards? (the original FMC authors use cumulative rewards)
         clone_strat = self.config.clone_strategy
-        if clone_strat == "predicted_values":
-            exploit = self.predicted_values
-        elif clone_strat == "cumulative_reward":
-            # TODO cache this...
-            cumulative_rewards = self.reward_buffer[:, : self.simulation_iteration].sum(
-                dim=1
-            )
-            exploit = cumulative_rewards
+        if clone_strat == "cumulative_reward":
+            exploit = self.cumulative_rewards
+        else:
+            raise ValueError(f"Clone strat {clone_strat} not supported.")
 
         rel_exploits = _relativize_vector(exploit).squeeze(-1).cpu()
         rel_distances = _relativize_vector(self.distances).cpu()
@@ -268,7 +210,6 @@ class FMC:
         self.log(
             {
                 **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
-                # **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
                 **mean_min_max_dict("fmc/distances", self.distances),
                 **mean_min_max_dict("fmc/auxiliaries", self.rewards),
             },
@@ -340,8 +281,7 @@ class FMC:
 
         self.actions = self._clone(self.actions)
         self.root_actions = self._clone(self.root_actions)
-        self.reward_buffer = self._clone(self.reward_buffer)
-        self.value_sum_buffer = self._clone(self.value_sum_buffer)
+        self.cumulative_rewards = self._clone(self.cumulative_rewards)
         self.visit_buffer = self._clone(self.visit_buffer)
         self.clone_receives = self._clone(self.clone_receives)  # yes... clone clone receives lol.
 
@@ -351,63 +291,12 @@ class FMC:
         if self.verbose:
             print("state after", self.state)
 
-    def _get_backprop_mask(self):
+    @torch.no_grad()
+    def _get_action_with_highest_cumulative_reward(self):
         # TODO: docstring
 
-        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
-        # to backpropagate the value regardless of if they are cloning or not.
-        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
-        force_backpropagate_all = self.simulation_iteration == self.k - 1
-
-        strat = self.config.backprop_strategy
-        if strat == "all" or force_backpropagate_all:
-            mask = torch.ones_like(self.clone_mask)
-        elif strat == "clone_mask":
-            mask = self.clone_mask
-        elif strat == "clone_participants":
-            mask = torch.logical_or(self.clone_mask, self.clone_receive_mask)
-        else:
-            raise ValueError(f'FMC Backprop strategy "{strat}" is not supported.')
-
-        return mask
-
-    def _backpropagate_reward_buffer(self):
-        """This essentially does the backpropagate step that MCTS does, although instead of maintaining an entire tree, it maintains
-        value sums and visit counts for each walker. These values may be subsequently cloned. There is some information loss
-        during this clone, but it should be minimally impactful.
-        """
-
-        mask = self._get_backprop_mask()
-
-        current_value_buffer = torch.zeros_like(self.value_sum_buffer)
-        for i in reversed(range(self.simulation_iteration + 1)):
-            step_rewards = self.reward_buffer[mask, i]
-            discounted_values = current_value_buffer[mask] * self.config.gamma
-            current_value_buffer[mask] = step_rewards + discounted_values
-
-        self.value_sum_buffer[:] = current_value_buffer
-        self.visit_buffer += mask.unsqueeze(-1)
-
-    @property
-    def root_value(self):
-        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average
-        value of each child node to the root with respect to the "visit count".
-        """
-
-        weighted_values = self.value_sum_buffer * self.visit_buffer
-        return weighted_values.sum() / self.visit_buffer.sum()
-
-    @torch.no_grad()
-    def _get_highest_value_action(self):
-        """The highest value action corresponds to the walker whom has the highest average estimated value."""
-
-        self.walker_values = self.value_sum_buffer / self.visit_buffer
-        highest_value_walker_index = torch.argmax(self.walker_values)
-        highest_value_action = (
-            self.root_actions[highest_value_walker_index]
-        )
-
-        return highest_value_action
+        walker_index = self.cumulative_rewards.argmax(0)
+        return self.root_actions[walker_index]
 
     @torch.no_grad()
     def _get_action_with_highest_clone_receives(self):
