@@ -33,12 +33,15 @@ class OnlineFMCPolicyTrainer:
         observation_encoder: Callable = None,
         loss_spec = None,
         fmc_config: FMCConfig = None,
+        use_ray: bool = False,
     ):
         self.env = load_environment(env)
 
         # TODO: config option
-        # self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
-        self.vec_env = SerialVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
+        if use_ray:
+            self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
+        else:
+            self.vec_env = SerialVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
 
         self.policy_model = policy_model
         self.optimizer = optimizer
