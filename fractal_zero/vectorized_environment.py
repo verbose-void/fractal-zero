@@ -10,9 +10,11 @@ from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import get_space_shape
 
 
-def load_environment(env: Union[str, gym.Env]) -> gym.Env:
+def load_environment(env: Union[str, gym.Env], copy: bool = False) -> gym.Env:
     if isinstance(env, str):
         return gym.make(env)
+    if copy:
+        return deepcopy(env)
     return env
 
 
@@ -31,10 +33,6 @@ class VectorizedEnvironment(ABC):
         for _ in range(self.n):
             actions.append(self._action_space.sample())
         return actions
-
-    def __init__(self, env: Union[str, gym.Env], n: int):
-        env = load_environment(env)
-        self.n = n
 
     def batch_step(self, actions):
         raise NotImplementedError
@@ -141,6 +139,69 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
         actions = []
         for env in self.envs:
             action_space = ray.get(env.get_action_space.remote())
+            actions.append(action_space.sample())
+        return actions
+
+
+class SerialVectorizedEnvironment(VectorizedEnvironment):
+    envs: List[gym.Env]
+
+    def __init__(self, env: Union[str, gym.Env], n: int, observation_encoder: Callable=None):
+        super().__init__(env, n)
+
+        # TODO: explain
+        self.observation_encoder = observation_encoder if observation_encoder else torch.tensor
+        
+        self.envs = [load_environment(env, copy=True) for _ in range(n)]
+
+    def batch_reset(self, *args, **kwargs):
+        return [env.reset(*args, **kwargs) for env in self.envs]
+
+    def batch_step(self, actions, *args, **kwargs):
+        assert len(actions) == self.n
+
+        observations = []
+        rewards = []
+        dones = []
+        infos = []
+        for i, env in enumerate(self.envs):
+            action = actions[i]
+            obs, rew, done, info = env.step(action, *args, **kwargs)
+            
+            observations.append(obs)
+            rewards.append(rew)
+            dones.append(done)
+            infos.append(info)
+        
+        states = self.observation_encoder(observations)
+
+        return (
+            states,
+            observations,
+            torch.tensor(rewards).unsqueeze(-1).float(),
+            dones,
+            infos,
+        )
+
+    def set_all_states(self, new_env: gym.Env, obs: np.ndarray):
+        self.envs = [deepcopy(new_env) for _ in range(self.n)]
+
+    def clone(self, partners, clone_mask):
+        assert len(clone_mask) == self.n
+
+        new_envs = []
+        for i, do_clone in enumerate(clone_mask):
+            env = self.envs[i]
+            if do_clone:
+                env = deepcopy(self.envs[partners[i]])
+            new_envs.append(env)
+        self.envs = new_envs
+
+    def batched_action_space_sample(self):
+        actions = []
+        for env in self.envs:
+            action_space = env.action_space
+            action_space.seed(None)  # TODO: better way to do this..
             actions.append(action_space.sample())
         return actions
 

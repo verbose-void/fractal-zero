@@ -14,6 +14,7 @@ from fractal_zero.utils import (
 
 from fractal_zero.vectorized_environment import (
     RayVectorizedEnvironment,
+    SerialVectorizedEnvironment,
     load_environment,
 )
 
@@ -34,7 +35,10 @@ class OnlineFMCPolicyTrainer:
         fmc_config: FMCConfig = None,
     ):
         self.env = load_environment(env)
-        self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
+
+        # TODO: config option
+        # self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
+        self.vec_env = SerialVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
 
         self.policy_model = policy_model
         self.optimizer = optimizer
@@ -65,6 +69,7 @@ class OnlineFMCPolicyTrainer:
         # t = torch.tensor(actions)
         # return [x], [t]
 
+        # TODO: instead of using weights, use the visit counts!
         weights = torch.ones((1, 1, len(observations))).float()
 
         return observations, actions, weights
@@ -92,7 +97,9 @@ class OnlineFMCPolicyTrainer:
             actions = []
             weights = []
             for _, child_node, data in g.out_edges(node, data=True):
-                weight = child_node.visits / self.fmc.num_walkers
+                # TODO: make this measure based on a proprotion of total clone receives?
+                weight = child_node.num_child_walkers / self.fmc.num_walkers
+
                 weights.append(weight)
 
                 action = data["action"]
