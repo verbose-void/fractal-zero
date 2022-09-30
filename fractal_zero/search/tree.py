@@ -67,7 +67,7 @@ class Path:
 
     @property
     def total_reward(self):
-        return sum([s.reward for s in self.ordered_states])
+        return float(sum([s.reward for s in self.ordered_states]))
 
     @property
     def last_node(self):
