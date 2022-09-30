@@ -28,9 +28,10 @@ class OnlineFMCPolicyTrainer:
         policy_model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         num_walkers: int,
+        observation_encoder: Callable = None,
     ):
         self.env = load_environment(env)
-        self.vec_env = RayVectorizedEnvironment(env, num_walkers)
+        self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
 
         self.policy_model = policy_model
         self.optimizer = optimizer
@@ -51,14 +52,14 @@ class OnlineFMCPolicyTrainer:
 
         path = self.fmc.tree.best_path
         for state, action in path:
-            obs = torch.tensor(state.observation)
-
-            observations.append(obs)
+            # obs = torch.tensor(state.observation)
+            observations.append(state.observation)
             actions.append(action)
 
-        x = torch.stack(observations).float()
-        t = torch.tensor(actions)
-        return [x], [t]
+        # x = torch.stack(observations).float()
+        # t = torch.tensor(actions)
+        # return [x], [t]
+        return observations, actions
 
     def _get_batch(self):
         if not self.fmc.tree:
@@ -178,3 +179,13 @@ class OnlineFMCPolicyTrainer:
                 "eval/total_rewards": sum(rewards),
             }
         )
+
+    def replay_best(self, render: bool=False):
+        _, actions = self._get_best_only_batch()
+        self.env.reset()
+
+        for action in actions:
+            self.env.step(action)
+
+            if render:
+                self.env.render()

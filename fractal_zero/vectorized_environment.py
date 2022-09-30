@@ -1,6 +1,6 @@
 from abc import ABC
 from copy import deepcopy
-from typing import List, Union
+from typing import Callable, List, Union
 import gym
 import ray
 import torch
@@ -75,10 +75,11 @@ class _RayWrappedEnvironment:
 class RayVectorizedEnvironment(VectorizedEnvironment):
     envs: List[_RayWrappedEnvironment]
 
-    def __init__(self, env: Union[str, gym.Env], n: int):
+    def __init__(self, env: Union[str, gym.Env], n: int, observation_encoder: Callable=None):
         super().__init__(env, n)
 
         self.envs = [_RayWrappedEnvironment.remote(env) for _ in range(n)]
+        self.observation_encoder = observation_encoder  # TODO: explain
 
     def batch_reset(self, *args, **kwargs):
         return ray.get([env.reset.remote(*args, **kwargs) for env in self.envs])
@@ -104,9 +105,13 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             infos.append(info)
 
         # TODO: these shapes and such should be cleaner to understand and more standardized throughout the code.
+
+        if self.observation_encoder:
+            observations = self.observation_encoder(observations)
+
         return (
-            torch.tensor(observations),
-            torch.tensor(rewards).unsqueeze(-1),
+            observations,
+            torch.tensor(rewards).unsqueeze(-1).float(),
             dones,
             infos,
         )
@@ -118,13 +123,19 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
     def clone(self, partners, clone_mask):
         assert len(clone_mask) == self.n
 
+        new_envs = []
+
         # TODO: this kind of cloning might not be the same as vectorized cloning!!!
         for i, do_clone in enumerate(clone_mask):
-            if not do_clone:
-                continue
             wrapped_env = self.envs[i]
-            new_state = self.envs[partners[i]].get_state.remote()
-            wrapped_env.set_state.remote(new_state)
+
+            if do_clone:
+                new_state = self.envs[partners[i]].get_state.remote()
+                wrapped_env.set_state.remote(new_state)
+
+            new_envs.append(wrapped_env)
+
+        self.envs = new_envs
 
     def batched_action_space_sample(self):
         actions = []

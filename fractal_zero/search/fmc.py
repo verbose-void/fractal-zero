@@ -424,12 +424,13 @@ class FMC:
             do_clone = self.clone_mask[i]
             partner = self.clone_partners[i]
 
-            if not do_clone:
-                continue
-
-            # NOTE: may not need to deepcopy.
-            new_leaf_actions.append(deepcopy(self.actions[partner]))
-            new_root_actions.append(deepcopy(self.root_actions[partner]))
+            if do_clone:
+                # NOTE: may not need to deepcopy.
+                new_leaf_actions.append(deepcopy(self.actions[partner]))
+                new_root_actions.append(deepcopy(self.root_actions[partner]))
+            else:
+                new_leaf_actions.append(self.actions[i])
+                new_root_actions.append(self.root_actions[i])
 
         self.actions = new_leaf_actions
         self.root_actions = new_root_actions

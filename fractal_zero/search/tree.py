@@ -20,7 +20,7 @@ class StateNode:
         return f"{self.num_child_walkers}"
 
     def __repr__(self):
-        return self.__str__
+        return self.__str__()
 
 
 class Path:
