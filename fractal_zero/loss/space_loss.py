@@ -64,12 +64,13 @@ def get_space_loss_function(space: gym.Space):
 
 
 class DiscreteSpaceLoss:
-    def __init__(self, discrete_space: spaces.Discrete, loss_func=F.mse_loss):
+    def __init__(self, discrete_space: spaces.Discrete, loss_func=None):
+        self.loss_func = loss_func if loss_func else F.mse_loss
+        
         if not isinstance(discrete_space, spaces.Discrete):
             raise ValueError(f"Expected Discrete space, got {discrete_space}.")
 
         self.space = discrete_space
-        self.loss_func = loss_func
 
     def _cast_x(self, x) -> torch.Tensor:
         return _float_cast(x)
@@ -101,33 +102,59 @@ class DiscreteSpaceLoss:
         return self.loss_func(x, y)
 
 
-class BoxLoss:
-    def __init__(self, box_space: spaces.Box):
+class BoxSpaceLoss:
+    def __init__(self, box_space: spaces.Box, loss_func=None):
+        self.loss_func = loss_func if loss_func else F.mse_loss
         if not isinstance(box_space, spaces.Box):
             raise ValueError(f"Expected Discrete space, got {box_space}.")
         self.space = box_space
 
     def __call__(self, x, y):
-        return F.mse_loss(_float_cast(x), _float_cast(y))
+        return self.loss_func(_float_cast(x), _float_cast(y))
 
 
-class DictLoss:
+LOSS_CLASSES = {
+    spaces.Discrete: DiscreteSpaceLoss,
+    spaces.Box: BoxSpaceLoss,
+}
+
+
+class DictSpaceLoss:
     def __init__(self, dict_space: spaces.Space, loss_function_spec: Dict=None):
-        if loss_function_spec is None:
-            loss_function_spec = {}
+        self.space = dict_space
+        self.loss_function_spec = loss_function_spec if loss_function_spec else {}
+        self._build_funcs()
 
-        pass
+    def _build_funcs(self):
+        self.funcs = {}
+        for key, subspace in self.space.items():
+            # sub_space_dist_func = get_space_loss_function(sub_space)
+
+            if isinstance(subspace, spaces.Dict):
+                raise NotImplementedError("TODO: nested dicts")
+
+            if type(subspace) not in LOSS_CLASSES:
+                raise ValueError(f"Subspace \"{subspace}\" is not supported.")
+
+            subspace_loss_class = LOSS_CLASSES[type(subspace)]
+            subspace_loss_func = self.loss_function_spec.get(key, None)
+            subspace_criterion = subspace_loss_class(subspace, loss_func=subspace_loss_func)
+            self.funcs[key] = subspace_criterion
 
     def __call__(self, y, t):
-        raise NotImplementedError
+        # TODO: support batch and reduce?
 
+        loss = 0
+        for key, func in self.funcs.items():
+            loss += func(y[key], t[key])
+        return loss
 
 class SpaceLoss:
     def __init__(self, space: gym.Space, loss_function_spec: Dict=None):
         self.space = space
 
         if isinstance(self.space, spaces.Box):
-            self.loss_callable = BoxLoss(self.space)
+            self.loss_callable = BoxSpaceLoss(self.space)
         elif isinstance(self.space, spaces.Discrete):
             self.loss_callable = DiscreteSpaceLoss(self.space)
         elif isinstance(self.space, spaces.Dict):
