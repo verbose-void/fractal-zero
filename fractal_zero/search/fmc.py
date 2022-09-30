@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import List
+from typing import List, Union
 from uuid import uuid4
 from warnings import warn
 import torch
@@ -104,6 +104,9 @@ class FMC:
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
             )
 
+        if self.value_model is not None:
+            raise ValueError("Value models are no longer supported.")
+
         if (
             self.value_model is None
             and self.config.clone_strategy == "predicted_values"
@@ -127,14 +130,12 @@ class FMC:
         self._assign_actions()
 
         (
+            self.states,
             self.observations,
             self.rewards,
             self.dones,
             _,
         ) = self.vectorized_environment.batch_step(self.actions)
-
-        if self.value_model is not None:
-            self.predicted_values = self.value_model.forward(self.observations)
 
         self.reward_buffer[:, self.simulation_iteration] = self.rewards
 
@@ -234,7 +235,7 @@ class FMC:
         """For the cloning phase, we calculate the distances between each walker and their partner for balancing exploration."""
 
         self.distances = torch.linalg.norm(
-            self.observations - self.observations[self.clone_partners], dim=1
+            self.states - self.states[self.clone_partners], dim=1
         )
 
     @torch.no_grad()
@@ -331,17 +332,18 @@ class FMC:
 
         # TODO: don't clone best walker (?)
         # execute clones
-        # self._clone_vector(self.state)
         self.vectorized_environment.clone(self.clone_partners, self.clone_mask)
 
-        self._clone_vector(self.observations)
-        self._clone_vector(self.rewards)
+        self.states = self._clone(self.states)
+        self.observations = self._clone(self.observations)
+        self.rewards = self._clone(self.rewards)
 
-        self._clone_actions()
-        self._clone_vector(self.reward_buffer)
-        self._clone_vector(self.value_sum_buffer)
-        self._clone_vector(self.visit_buffer)
-        self._clone_vector(self.clone_receives)  # yes... clone clone receives lol.
+        self.actions = self._clone(self.actions)
+        self.root_actions = self._clone(self.root_actions)
+        self.reward_buffer = self._clone(self.reward_buffer)
+        self.value_sum_buffer = self._clone(self.value_sum_buffer)
+        self.visit_buffer = self._clone(self.visit_buffer)
+        self.clone_receives = self._clone(self.clone_receives)  # yes... clone clone receives lol.
 
         if self.tree:
             self.tree.clone(self.clone_partners, self.clone_mask)
@@ -413,8 +415,29 @@ class FMC:
         most_cloned_to_walker = torch.argmax(self.clone_receives)
         return self.root_actions[most_cloned_to_walker]
 
+    def _clone(self, subject):
+        if isinstance(subject, torch.Tensor):
+            return self._clone_vector(subject)
+        elif isinstance(subject, list):
+            return self._clone_list(subject)
+        raise NotImplementedError
+
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
+        return vector
+
+    def _clone_list(self, l: List):
+        new_list = []
+        for i in range(self.num_walkers):
+            do_clone = self.clone_mask[i]
+            partner = self.clone_partners[i]
+
+            if do_clone:
+                # NOTE: may not need to deepcopy.
+                new_list.append(deepcopy(l[partner]))
+            else:
+                new_list.append(l[i])
+        return new_list
 
     def _clone_actions(self):
         new_leaf_actions = []

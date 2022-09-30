@@ -107,9 +107,12 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
         # TODO: these shapes and such should be cleaner to understand and more standardized throughout the code.
 
         if self.observation_encoder:
-            observations = self.observation_encoder(observations)
+            states = self.observation_encoder(observations)
+        else:
+            states = observations
 
         return (
+            states,
             observations,
             torch.tensor(rewards).unsqueeze(-1).float(),
             dones,
