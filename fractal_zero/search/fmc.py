@@ -120,12 +120,6 @@ class FMC:
     def device(self):
         return self.config.device
 
-    @property
-    def batch_actions(self):
-        if self.config.search_using_actual_environment:
-            return self.parsed_actions
-        return self.actions
-
     @torch.no_grad()
     def _perturbate(self):
         """Advance the state of each walker."""
@@ -137,7 +131,7 @@ class FMC:
             self.rewards,
             self.dones,
             _,
-        ) = self.vectorized_environment.batch_step(self.batch_actions)
+        ) = self.vectorized_environment.batch_step(self.actions)
 
         if self.value_model is not None:
             self.predicted_values = self.value_model.forward(self.observations)
@@ -196,37 +190,37 @@ class FMC:
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
-        random_parsed_actions = (
-            self.vectorized_environment.batched_action_space_sample()
-        )
-        random_actions = torch.tensor(random_parsed_actions, device=self.device)
+        self.actions = self.vectorized_environment.batched_action_space_sample()
+        # random_actions = torch.tensor(random_parsed_actions, device=self.device)
 
         if self.policy_model and self.config.use_policy_for_action_selection:
-            # TODO: config
-            use_epsilon_greedy = True
+            # # TODO: config
+            # use_epsilon_greedy = True
 
-            with_randomness = not use_epsilon_greedy
-            policy_actions = self.policy_model.forward(
-                self.observations, with_randomness=with_randomness
-            )
-            # policy_parsed_actions = self.policy_model.parse_actions(self.actions)
+            # with_randomness = not use_epsilon_greedy
+            # policy_actions = self.policy_model.forward(
+            #     self.observations, with_randomness=with_randomness
+            # )
+            # # policy_parsed_actions = self.policy_model.parse_actions(self.actions)
 
-            if use_epsilon_greedy:
-                # TODO: epsilon param
-                greedy_mask = torch.rand(self.num_walkers) < 0.1
-            else:
-                greedy_mask = torch.ones(self.num_walkers, dtype=bool)
+            # if use_epsilon_greedy:
+            #     # TODO: epsilon param
+            #     greedy_mask = torch.rand(self.num_walkers) < 0.1
+            # else:
+            #     greedy_mask = torch.ones(self.num_walkers, dtype=bool)
 
-            self.actions = torch.where(greedy_mask, policy_actions, random_actions)
-            self.parsed_actions = self.policy_model.parse_actions(self.actions)
+            # self.actions = torch.where(greedy_mask, policy_actions, random_actions)
+            # self.parsed_actions = self.policy_model.parse_actions(self.actions)
+            raise NotImplementedError
 
-        else:
+        # else:
             # use pure random actions if no policy model is provided.
-            self.parsed_actions = random_parsed_actions
-            self.actions = random_actions.unsqueeze(-1)
+            # self.parsed_actions = random_parsed_actions
+            # self.actions = random_actions.unsqueeze(-1)
+            # self.actions = random_actions
 
         if self.root_actions is None:
-            self.root_actions = self.actions.cpu().detach().clone()
+            self.root_actions = deepcopy(self.actions)
 
     @torch.no_grad()
     def _assign_clone_partners(self):
@@ -343,8 +337,7 @@ class FMC:
         self._clone_vector(self.observations)
         self._clone_vector(self.rewards)
 
-        self._clone_vector(self.actions)
-        self._clone_vector(self.root_actions)
+        self._clone_actions()
         self._clone_vector(self.reward_buffer)
         self._clone_vector(self.value_sum_buffer)
         self._clone_vector(self.visit_buffer)
@@ -409,7 +402,7 @@ class FMC:
         self.walker_values = self.value_sum_buffer / self.visit_buffer
         highest_value_walker_index = torch.argmax(self.walker_values)
         highest_value_action = (
-            self.root_actions[highest_value_walker_index].cpu().numpy()
+            self.root_actions[highest_value_walker_index]
         )
 
         return highest_value_action
@@ -418,10 +411,28 @@ class FMC:
     def _get_action_with_highest_clone_receives(self):
         # TODO: docstring
         most_cloned_to_walker = torch.argmax(self.clone_receives)
-        return self.root_actions[most_cloned_to_walker, 0].cpu().numpy()
+        return self.root_actions[most_cloned_to_walker]
 
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
+
+    def _clone_actions(self):
+        new_leaf_actions = []
+        new_root_actions = []
+
+        for i in range(self.num_walkers):
+            do_clone = self.clone_mask[i]
+            partner = self.clone_partners[i]
+
+            if not do_clone:
+                continue
+
+            # NOTE: may not need to deepcopy.
+            new_leaf_actions.append(deepcopy(self.actions[partner]))
+            new_root_actions.append(deepcopy(self.root_actions[partner]))
+
+        self.actions = new_leaf_actions
+        self.root_actions = new_root_actions
 
     def log(self, *args, **kwargs):
         # TODO: separate logger class
