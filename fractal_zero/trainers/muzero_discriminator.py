@@ -162,9 +162,9 @@ class FractalMuZeroDiscriminatorTrainer:
         self.model_environment.set_all_states(obs)
 
         # TODO: maybe incorporate policy model? or maybe we can just use FMC to search?
-        self.fmc = FMC(self.model_environment, balance=3)
+        self.fmc = FMC(self.model_environment, balance=1)
 
-        lookahead_steps = 1
+        lookahead_steps = 8
 
         observations = []
         actions = []
@@ -205,28 +205,25 @@ class FractalMuZeroDiscriminatorTrainer:
         self.model_environment.train()
         self.optimizer.zero_grad()
 
-        # TODO: simplify this, lots of copies!
-        # get batch
         agent_x, agent_y = self._get_agent_trajectory(max_steps)
         expert_x, expert_y = self.expert_dataset.sample_trajectory(max_steps)
 
-        # # get hidden representation of the observations as states
-        # agent_states = self.representation.forward(agent_x.float())
-        # expert_states = self.representation.forward(expert_x.float())
-
-        # # add the hidden representations with the action embeddings (TODO: de-duplciate this code, it exists
-        # # within the FMZG model too.)
-        # agent_samples = torch.cat((agent_states, agent_y.unsqueeze(-1)), dim=-1)
-        # expert_samples = torch.cat((expert_states, expert_y.unsqueeze(-1)), dim=-1)
-        # x = torch.cat((agent_samples, expert_samples)).float()
-        # t = torch.tensor(([0] * agent_samples.shape[0]) + [1] * expert_samples.shape[0]).float()
-
-        # discriminator_confusions = self.discriminator.forward(x).squeeze(-1)
-
-        # TODO: write discriminator forward such that it can support full trajectories (if using a transformer/RNN)
-
         assert len(agent_x) == len(agent_y)
         assert len(expert_x) == len(expert_y)
+
+
+
+
+
+
+
+        # TODO: instead of having the discriminator discriminate directly against FMC,
+        # have it discriminate against a
+        #  policy model being trained by FMC?
+        # then, the discriminator should train to predict the differences between the policy model
+        # and the expert model.
+        # TODO: both should OPTIONALLY share the dynamics function backbone. if the gen and discrim should NOT have
+        # a shared backbone, the policy model's dynamics function should be used by FMC.
 
         agent_confusions, agent_consistency = self.model_environment.discriminate_single_trajectory(
             agent_x.float(), 
