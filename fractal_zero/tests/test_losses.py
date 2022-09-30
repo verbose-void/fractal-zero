@@ -4,7 +4,7 @@ import gym.spaces as spaces
 import torch
 import torch.nn.functional as F
 
-from fractal_zero.loss.space_loss import DictSpaceLoss, DiscreteSpaceLoss, SpaceLoss
+from fractal_zero.loss.space_loss import BoxSpaceLoss, DictSpaceLoss, DiscreteSpaceLoss, SpaceLoss
 
 
 def _general_assertions(space: spaces.Space, criterion: SpaceLoss):
@@ -28,13 +28,13 @@ def _general_assertions(space: spaces.Space, criterion: SpaceLoss):
 
 def test_box():
     space = spaces.Box(low=0, high=2, shape=(5, 3))
-    criterion = SpaceLoss(space)
+    criterion = BoxSpaceLoss(space)
 
     _general_assertions(space, criterion)
 
 def test_discrete():
     space = spaces.Discrete(5)
-    criterion = SpaceLoss(space)
+    criterion = DiscreteSpaceLoss(space)
     _general_assertions(space, criterion)
 
     # use cross entropy (expects logits)

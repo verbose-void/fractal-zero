@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import Dict, Mapping, Sequence
 import torch
 import torch.nn.functional as F
@@ -18,52 +19,11 @@ def _long_cast(vec):
     return torch.tensor(vec, dtype=torch.long).long()
 
 
-def _cast_then_mse(y, t) -> float:
-    y = _float_cast(y)
-    t = _float_cast(t)
-    return F.mse_loss(y, t)
+class SpaceLoss(ABC):
+    pass
 
 
-def get_space_loss_function(space: gym.Space):
-    # TODO: docstring
-
-    if isinstance(space, gym.spaces.Tuple):
-        raise NotImplementedError
-
-    if isinstance(space, gym.spaces.Dict):
-
-        # build reduce function
-
-        funcs = {}
-        for key, sub_space in space.items():
-            sub_space_dist_func = get_space_loss_function(sub_space)
-            funcs[key] = sub_space_dist_func
-
-        def _composite_distance(y, t):
-            # TODO: assert same space spec?
-
-            c = 0
-            total = 0
-            for key, func in funcs.items():
-                y_value = y[key]
-                t_value = t[key]
-                total += func(y_value, t_value)
-                c += 1
-
-            return total / c
-
-        return _composite_distance
-
-    if isinstance(space, gym.spaces.Box):
-        return _cast_then_mse
-
-    if isinstance(space, gym.spaces.Discrete):
-        return _cast_then_mse
-
-    raise NotImplementedError
-
-
-class DiscreteSpaceLoss:
+class DiscreteSpaceLoss(SpaceLoss):
     def __init__(self, discrete_space: spaces.Discrete, loss_func=None):
         self.loss_func = loss_func if loss_func else F.mse_loss
 
@@ -102,7 +62,7 @@ class DiscreteSpaceLoss:
         return self.loss_func(x, y)
 
 
-class BoxSpaceLoss:
+class BoxSpaceLoss(SpaceLoss):
     def __init__(self, box_space: spaces.Box, loss_func=None):
         self.loss_func = loss_func if loss_func else F.mse_loss
         if not isinstance(box_space, spaces.Box):
@@ -119,7 +79,7 @@ LOSS_CLASSES = {
 }
 
 
-class DictSpaceLoss:
+class DictSpaceLoss(SpaceLoss):
     def __init__(self, dict_space: spaces.Space, loss_spec: Dict=None):
         self.space = dict_space
         self.loss_spec = loss_spec if loss_spec else {}
@@ -170,23 +130,3 @@ class DictSpaceLoss:
 
         return self._dict_loss(y, t)
 
-class SpaceLoss:
-    def __init__(self, space: gym.Space, loss_function_spec: Dict=None):
-        self.space = space
-
-        if isinstance(self.space, spaces.Box):
-            self.loss_callable = BoxSpaceLoss(self.space)
-        elif isinstance(self.space, spaces.Discrete):
-            self.loss_callable = DiscreteSpaceLoss(self.space)
-        elif isinstance(self.space, spaces.Dict):
-            # TODO: include loss function spec
-            raise NotImplementedError("TODO: recursively create class")
-        elif isinstance(self.space, spaces.Tuple):
-            raise NotImplementedError("TODO: recursively create class")
-        else:
-            raise NotImplementedError(f"Doesn't yet support {type(self.space)}")
-
-        # TODO: flag to allow values outside of the ranges
-
-    def __call__(self, x, y):
-        return self.loss_callable(x, y)
