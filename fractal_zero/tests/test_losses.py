@@ -75,8 +75,8 @@ def test_discrete_dict():
     space0_sample = torch.tensor([4.0], requires_grad=True)
     space0_target = torch.tensor([10.0])
 
-    space1_sample = torch.tensor([[0.1, 0.4, 0.5, 0.1, 0.3, 0.2]], requires_grad=True)
-    space1_target = torch.tensor([5])
+    space1_sample = torch.tensor([[0.1, 0.4, 0.5], [0.1, 0.3, 0.2]], requires_grad=True)
+    space1_target = torch.tensor([2, 1])
 
     expected_loss = F.mse_loss(space0_sample, space0_target) + F.cross_entropy(space1_sample, space1_target)
 
@@ -95,12 +95,12 @@ def test_dict():
     })
 
     space.seed(5)
-    critereon = DictSpaceLoss(space)
+    criterion = DictSpaceLoss(space)
 
     a0 = {"x": torch.tensor(3.0, requires_grad=True), "y": torch.tensor([0.3, 0.1], requires_grad=True)}
     a1 = space.sample()
 
-    loss = critereon(a0, a1)
+    loss = criterion(a0, a1)
     
     print(a0)
     print(a1)
@@ -108,3 +108,11 @@ def test_dict():
 
     loss.backward()
     assert torch.isclose(loss, torch.tensor(1.0553), rtol=0.0001)
+
+    # with batch
+    a0_batch = [a0 for _ in range(5)]
+    a1_batch = [space.sample() for _ in range(5)]
+
+    bloss = criterion(a0_batch, a1_batch)
+    bloss.backward()
+    assert torch.isclose(bloss, torch.tensor(3.3352), rtol=0.0001)

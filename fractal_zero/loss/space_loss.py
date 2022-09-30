@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Mapping, Sequence
 import torch
 import torch.nn.functional as F
 
@@ -142,13 +142,33 @@ class DictSpaceLoss:
             subspace_criterion = subspace_loss_class(subspace, **subspace_kwargs)
             self.funcs[key] = subspace_criterion
 
-    def __call__(self, y, t):
-        # TODO: support batch and reduce?
-
+    def _dict_loss(self, y, t):
         loss = 0
         for key, func in self.funcs.items():
             loss += func(y[key], t[key])
         return loss
+
+    def __call__(self, y, t):
+        both_seqs = isinstance(y, Sequence) and isinstance(t, Sequence)
+        both_dicts = isinstance(y, Mapping) and isinstance(t, Mapping)
+        if not both_seqs and not both_dicts:
+            raise TypeError(f"Type mismatch. Expected both inputs to be matching. Got: {type(y)} and {type(t)}.")
+
+        if both_seqs:
+
+            if len(y) != len(t):
+                raise ValueError(f"Expected both inputs to be the same length. Got {len(y)} and {len(t)}.")
+
+            total = 0
+            c = 0
+            for y_sample, t_sample in zip(y, t):
+                total += self._dict_loss(y_sample, t_sample)
+                c += 1
+            
+            # TODO: support reduce function instead of always doing mean?
+            return total / c
+
+        return self._dict_loss(y, t)
 
 class SpaceLoss:
     def __init__(self, space: gym.Space, loss_function_spec: Dict=None):
