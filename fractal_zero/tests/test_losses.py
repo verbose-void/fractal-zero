@@ -66,7 +66,7 @@ def test_discrete_dict():
             "space0": space,
             "subspace": spaces.Dict({"space1": space}),
         }),
-        loss_function_spec={
+        loss_spec={
             "space0": F.mse_loss,  # if this was None, should be default
             "subspace": {"space1": F.cross_entropy},
         },

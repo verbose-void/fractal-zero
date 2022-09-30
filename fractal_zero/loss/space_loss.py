@@ -66,7 +66,7 @@ def get_space_loss_function(space: gym.Space):
 class DiscreteSpaceLoss:
     def __init__(self, discrete_space: spaces.Discrete, loss_func=None):
         self.loss_func = loss_func if loss_func else F.mse_loss
-        
+
         if not isinstance(discrete_space, spaces.Discrete):
             raise ValueError(f"Expected Discrete space, got {discrete_space}.")
 
@@ -120,25 +120,26 @@ LOSS_CLASSES = {
 
 
 class DictSpaceLoss:
-    def __init__(self, dict_space: spaces.Space, loss_function_spec: Dict=None):
+    def __init__(self, dict_space: spaces.Space, loss_spec: Dict=None):
         self.space = dict_space
-        self.loss_function_spec = loss_function_spec if loss_function_spec else {}
+        self.loss_spec = loss_spec if loss_spec else {}
         self._build_funcs()
 
     def _build_funcs(self):
         self.funcs = {}
         for key, subspace in self.space.items():
-            # sub_space_dist_func = get_space_loss_function(sub_space)
+            subspace_loss_func = self.loss_spec.get(key, None)
 
             if isinstance(subspace, spaces.Dict):
-                raise NotImplementedError("TODO: nested dicts")
-
-            if type(subspace) not in LOSS_CLASSES:
+                subspace_loss_class = DictSpaceLoss
+                subspace_kwargs = {"loss_spec": subspace_loss_func}
+            elif type(subspace) not in LOSS_CLASSES:
                 raise ValueError(f"Subspace \"{subspace}\" is not supported.")
-
-            subspace_loss_class = LOSS_CLASSES[type(subspace)]
-            subspace_loss_func = self.loss_function_spec.get(key, None)
-            subspace_criterion = subspace_loss_class(subspace, loss_func=subspace_loss_func)
+            else:
+                subspace_loss_class = LOSS_CLASSES[type(subspace)]
+                subspace_kwargs = {"loss_func": subspace_loss_func}
+                
+            subspace_criterion = subspace_loss_class(subspace, **subspace_kwargs)
             self.funcs[key] = subspace_criterion
 
     def __call__(self, y, t):
