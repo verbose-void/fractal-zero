@@ -7,6 +7,7 @@ import wandb
 
 from fractal_zero.loss.space_loss import get_space_loss
 from fractal_zero.search.fmc import FMC
+from fractal_zero.config import FMCConfig
 from fractal_zero.utils import (
     kl_divergence_of_model_paramters,
 )
@@ -30,6 +31,7 @@ class OnlineFMCPolicyTrainer:
         num_walkers: int,
         observation_encoder: Callable = None,
         loss_spec = None,
+        fmc_config: FMCConfig = None,
     ):
         self.env = load_environment(env)
         self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
@@ -41,10 +43,12 @@ class OnlineFMCPolicyTrainer:
         self.most_reward = float("-inf")
         self.best_model = None
 
+        self.fmc_config = fmc_config
+
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
 
-        self.fmc = FMC(self.vec_env)  # , policy_model=self.policy_model)
+        self.fmc = FMC(self.vec_env, config=self.fmc_config)  # , policy_model=self.policy_model)
         self.fmc.simulate(max_steps)
 
     def _get_best_only_batch(self):
@@ -61,14 +65,16 @@ class OnlineFMCPolicyTrainer:
         # t = torch.tensor(actions)
         # return [x], [t]
 
-        return observations, actions
+        weights = torch.ones((1, 1, len(observations))).float()
+
+        return observations, actions, weights
 
     def _get_batch(self):
         if not self.fmc.tree:
             raise ValueError("FMC is not tracking walker paths.")
 
         # TODO: config
-        best_only = True
+        best_only = False
 
         if best_only:
             return self._get_best_only_batch()
@@ -86,7 +92,8 @@ class OnlineFMCPolicyTrainer:
             actions = []
             weights = []
             for _, child_node, data in g.out_edges(node, data=True):
-                weights.append(child_node.visits)
+                weight = child_node.visits / self.fmc.num_walkers
+                weights.append(weight)
 
                 action = data["action"]
                 actions.append(action)
@@ -96,14 +103,11 @@ class OnlineFMCPolicyTrainer:
 
         return observations, child_actions, child_weights
 
-    def _general_loss(self, action, action_targets):#, action_weights):
-        # normalized_action_weights = action_weights / action_weights.sum()
-
+    def _general_loss(self, action, action_targets, action_weights):
         # TODO: vectorize better (if possible?)
         loss = 0
-        # for action_target, weight in zip(action_targets, normalized_action_weights):
-        for action_target in action_targets:
-            loss += self.action_loss(action, action_target)
+        for action_target, weight in zip(action_targets, action_weights):
+            loss += self.action_loss(action, action_target) * weight
         return loss
 
     def train_on_latest_episode(self):
@@ -113,20 +117,18 @@ class OnlineFMCPolicyTrainer:
         # TODO: make more efficient somehow?
         self.params_before = deepcopy(list(self.policy_model.parameters()))
 
-        observations, actions = self._get_batch()
+        observations, actions, weights = self._get_batch()
         # assert len(observations) == len(actions) == len(weights)
         assert len(observations) == len(actions)
 
         # NOTE: loss for trajectories of weighted multi-target actions
         loss = 0
         action_predictions = self.policy_model.forward(observations)
-        # for y, action_targets, action_weights in zip(
-            # action_predictions, actions, weights
-        for y, action_targets in zip(
-            action_predictions, actions
+        for y, action_targets, action_weights in zip(
+            action_predictions, actions, weights,
         ):
             trajectory_loss = self._general_loss(
-                y, action_targets#, action_weights
+                y, action_targets, action_weights
             )
             loss += trajectory_loss
         loss = loss / len(observations)
