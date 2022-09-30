@@ -1,3 +1,4 @@
+from typing import Dict
 import torch
 import torch.nn.functional as F
 
@@ -110,8 +111,19 @@ class BoxLoss:
         return F.mse_loss(_float_cast(x), _float_cast(y))
 
 
+class DictLoss:
+    def __init__(self, dict_space: spaces.Space, loss_function_spec: Dict=None):
+        if loss_function_spec is None:
+            loss_function_spec = {}
+
+        pass
+
+    def __call__(self, y, t):
+        raise NotImplementedError
+
+
 class SpaceLoss:
-    def __init__(self, space: gym.Space):
+    def __init__(self, space: gym.Space, loss_function_spec: Dict=None):
         self.space = space
 
         if isinstance(self.space, spaces.Box):
@@ -119,6 +131,7 @@ class SpaceLoss:
         elif isinstance(self.space, spaces.Discrete):
             self.loss_callable = DiscreteSpaceLoss(self.space)
         elif isinstance(self.space, spaces.Dict):
+            # TODO: include loss function spec
             raise NotImplementedError("TODO: recursively create class")
         elif isinstance(self.space, spaces.Tuple):
             raise NotImplementedError("TODO: recursively create class")
