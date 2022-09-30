@@ -177,6 +177,7 @@ class OnlineFMCPolicyTrainer:
                 self.best_model = deepcopy(self.policy_model)
 
         self._log_last_eval_step(rewards)
+        return sum(rewards)
 
     def _log_last_train_step(self, train_loss: float):
         if wandb.run is None:

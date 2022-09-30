@@ -135,6 +135,9 @@ class FMC:
             disable=not use_tqdm,
         )
         for self.simulation_iteration in it:
+            # in case the vectorized environment was used to perform another operation.
+            self._validate_num_walkers()
+
             self._perturbate()
             self._prepare_clone_variables()
             self._execute_cloning()
