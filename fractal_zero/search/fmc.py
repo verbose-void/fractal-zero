@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import List
+from typing import List, Union
 from uuid import uuid4
 from warnings import warn
 import torch
@@ -44,14 +44,10 @@ class FMC:
     def __init__(
         self,
         vectorized_environment: VectorizedEnvironment,
-        policy_model: torch.nn.Module = None,
-        value_model: torch.nn.Module = None,
         config: FMCConfig = None,
         verbose: bool = False,
     ):
         self.vectorized_environment = vectorized_environment
-        self.policy_model = policy_model
-        self.value_model = value_model
         self.verbose = verbose
 
         self.config = self._build_default_config() if config is None else config
@@ -83,34 +79,24 @@ class FMC:
             size=(self.num_walkers, 1),
             dtype=int,
         )
+        self.cumulative_rewards = torch.zeros(size=(self.num_walkers, 1), dtype=float)
         self.root_actions = None
 
     def _build_default_config(self) -> FMCConfig:
-        use_actual_env = not isinstance(
-            self.vectorized_environment, VectorizedDynamicsModelEnvironment
-        )
+        return FMCConfig(num_walkers=self.vectorized_environment.n)
 
-        return FMCConfig(
-            num_walkers=self.vectorized_environment.n,
-            search_using_actual_environment=use_actual_env,
-            clone_strategy="predicted_values"
-            if self.value_model is not None
-            else "cumulative_reward",
-        )
-
-    def _validate_config(self):
+    def _validate_num_walkers(self):
         if self.config.num_walkers != self.vectorized_environment.n:
             raise ValueError(
                 f"Expected config num walkers ({self.config.num_walkers}) and vectorized environment n ({self.vectorized_environment.n}) to match."
             )
 
-        if (
-            self.value_model is None
-            and self.config.clone_strategy == "predicted_values"
-        ):
-            raise ValueError(
-                "Cannot clone based on predicted values when no model is provided. Change the strategy or provide a policy + value model."
+    def _validate_config(self):
+        if self.config.use_policy_for_action_selection:
+            raise NotImplementedError(
+                "Using policy functions to sample walker actions not yet supported."
             )
+        self._validate_num_walkers()
 
     @property
     def num_walkers(self) -> int:
@@ -120,12 +106,6 @@ class FMC:
     def device(self):
         return self.config.device
 
-    @property
-    def batch_actions(self):
-        if self.config.search_using_actual_environment:
-            return self.parsed_actions
-        return self.actions
-
     @torch.no_grad()
     def _perturbate(self):
         """Advance the state of each walker."""
@@ -133,16 +113,14 @@ class FMC:
         self._assign_actions()
 
         (
+            self.states,
             self.observations,
             self.rewards,
             self.dones,
             _,
-        ) = self.vectorized_environment.batch_step(self.batch_actions)
+        ) = self.vectorized_environment.batch_step(self.actions)
 
-        if self.value_model is not None:
-            self.predicted_values = self.value_model.forward(self.observations)
-
-        self.reward_buffer[:, self.simulation_iteration] = self.rewards
+        self.cumulative_rewards += self.rewards
 
         if self.tree:
             self.tree.build_next_level(self.actions, self.observations, self.rewards)
@@ -154,12 +132,6 @@ class FMC:
         self.k = k
         assert self.k > 0
 
-        # NOTE: can't exist in reset.
-        self.reward_buffer = torch.zeros(
-            size=(self.num_walkers, self.k, 1),
-            dtype=float,
-        )
-
         it = tqdm(
             range(self.k),
             desc="Simulating with FMC",
@@ -167,9 +139,11 @@ class FMC:
             disable=not use_tqdm,
         )
         for self.simulation_iteration in it:
+            # in case the vectorized environment was used to perform another operation.
+            self._validate_num_walkers()
+
             self._perturbate()
             self._prepare_clone_variables()
-            self._backpropagate_reward_buffer()
             self._execute_cloning()
 
         # TODO: try to convert the root action distribution into a policy distribution? this may get hard in continuous action spaces. https://arxiv.org/pdf/1805.09613.pdf
@@ -187,46 +161,20 @@ class FMC:
             commit=False,
         )
 
-        # TODO: experiment with these
-        if greedy_action:
-            return self._get_highest_value_action()
+        return self.get_root_action(greedy_action)
+
+    def get_root_action(self, greedy: bool):
+        if greedy:
+            return self._get_action_with_highest_cumulative_reward()
         return self._get_action_with_highest_clone_receives()
 
     @torch.no_grad()
     def _assign_actions(self):
         """Each walker picks an action to advance it's state."""
 
-        random_parsed_actions = (
-            self.vectorized_environment.batched_action_space_sample()
-        )
-        random_actions = torch.tensor(random_parsed_actions, device=self.device)
-
-        if self.policy_model and self.config.use_policy_for_action_selection:
-            # TODO: config
-            use_epsilon_greedy = True
-
-            with_randomness = not use_epsilon_greedy
-            policy_actions = self.policy_model.forward(
-                self.observations, with_randomness=with_randomness
-            )
-            # policy_parsed_actions = self.policy_model.parse_actions(self.actions)
-
-            if use_epsilon_greedy:
-                # TODO: epsilon param
-                greedy_mask = torch.rand(self.num_walkers) < 0.1
-            else:
-                greedy_mask = torch.ones(self.num_walkers, dtype=bool)
-
-            self.actions = torch.where(greedy_mask, policy_actions, random_actions)
-            self.parsed_actions = self.policy_model.parse_actions(self.actions)
-
-        else:
-            # use pure random actions if no policy model is provided.
-            self.parsed_actions = random_parsed_actions
-            self.actions = random_actions.unsqueeze(-1)
-
+        self.actions = self.vectorized_environment.batched_action_space_sample()
         if self.root_actions is None:
-            self.root_actions = self.actions.cpu().detach().clone()
+            self.root_actions = deepcopy(self.actions)
 
     @torch.no_grad()
     def _assign_clone_partners(self):
@@ -240,7 +188,7 @@ class FMC:
         """For the cloning phase, we calculate the distances between each walker and their partner for balancing exploration."""
 
         self.distances = torch.linalg.norm(
-            self.observations - self.observations[self.clone_partners], dim=1
+            self.states - self.states[self.clone_partners], dim=1
         )
 
     @torch.no_grad()
@@ -257,14 +205,10 @@ class FMC:
         # TODO EXPERIMENT: should we be using the value estimates? or should we be using the value buffer?
         # or should we be using the cumulative rewards? (the original FMC authors use cumulative rewards)
         clone_strat = self.config.clone_strategy
-        if clone_strat == "predicted_values":
-            exploit = self.predicted_values
-        elif clone_strat == "cumulative_reward":
-            # TODO cache this...
-            cumulative_rewards = self.reward_buffer[:, : self.simulation_iteration].sum(
-                dim=1
-            )
-            exploit = cumulative_rewards
+        if clone_strat == "cumulative_reward":
+            exploit = self.cumulative_rewards
+        else:
+            raise ValueError(f"Clone strat {clone_strat} not supported.")
 
         rel_exploits = _relativize_vector(exploit).squeeze(-1).cpu()
         rel_distances = _relativize_vector(self.distances).cpu()
@@ -273,7 +217,6 @@ class FMC:
         self.log(
             {
                 **mean_min_max_dict("fmc/virtual_rewards", self.virtual_rewards),
-                # **mean_min_max_dict("fmc/predicted_values", self.predicted_values),
                 **mean_min_max_dict("fmc/distances", self.distances),
                 **mean_min_max_dict("fmc/auxiliaries", self.rewards),
             },
@@ -337,18 +280,19 @@ class FMC:
 
         # TODO: don't clone best walker (?)
         # execute clones
-        # self._clone_vector(self.state)
         self.vectorized_environment.clone(self.clone_partners, self.clone_mask)
 
-        self._clone_vector(self.observations)
-        self._clone_vector(self.rewards)
+        self.states = self._clone(self.states)
+        self.observations = self._clone(self.observations)
+        self.rewards = self._clone(self.rewards)
 
-        self._clone_vector(self.actions)
-        self._clone_vector(self.root_actions)
-        self._clone_vector(self.reward_buffer)
-        self._clone_vector(self.value_sum_buffer)
-        self._clone_vector(self.visit_buffer)
-        self._clone_vector(self.clone_receives)  # yes... clone clone receives lol.
+        self.actions = self._clone(self.actions)
+        self.root_actions = self._clone(self.root_actions)
+        self.cumulative_rewards = self._clone(self.cumulative_rewards)
+        self.visit_buffer = self._clone(self.visit_buffer)
+        self.clone_receives = self._clone(
+            self.clone_receives
+        )  # yes... clone clone receives lol.
 
         if self.tree:
             self.tree.clone(self.clone_partners, self.clone_mask)
@@ -356,72 +300,64 @@ class FMC:
         if self.verbose:
             print("state after", self.state)
 
-    def _get_backprop_mask(self):
+    @torch.no_grad()
+    def _get_action_with_highest_cumulative_reward(self):
         # TODO: docstring
 
-        # usually, we only backpropagate the walkers who are about to clone away. However, at the very end of the simulation, we want
-        # to backpropagate the value regardless of if they are cloning or not.
-        # TODO: experiment with this, i'm not sure if it's better to always backpropagate all or only at the end. it's an open question.
-        force_backpropagate_all = self.simulation_iteration == self.k - 1
-
-        strat = self.config.backprop_strategy
-        if strat == "all" or force_backpropagate_all:
-            mask = torch.ones_like(self.clone_mask)
-        elif strat == "clone_mask":
-            mask = self.clone_mask
-        elif strat == "clone_participants":
-            mask = torch.logical_or(self.clone_mask, self.clone_receive_mask)
-        else:
-            raise ValueError(f'FMC Backprop strategy "{strat}" is not supported.')
-
-        return mask
-
-    def _backpropagate_reward_buffer(self):
-        """This essentially does the backpropagate step that MCTS does, although instead of maintaining an entire tree, it maintains
-        value sums and visit counts for each walker. These values may be subsequently cloned. There is some information loss
-        during this clone, but it should be minimally impactful.
-        """
-
-        mask = self._get_backprop_mask()
-
-        current_value_buffer = torch.zeros_like(self.value_sum_buffer)
-        for i in reversed(range(self.simulation_iteration + 1)):
-            step_rewards = self.reward_buffer[mask, i]
-            discounted_values = current_value_buffer[mask] * self.config.gamma
-            current_value_buffer[mask] = step_rewards + discounted_values
-
-        self.value_sum_buffer[:] = current_value_buffer
-        self.visit_buffer += mask.unsqueeze(-1)
-
-    @property
-    def root_value(self):
-        """Kind of equivalent to the MCTS root value. The root value is equal to the weighted average
-        value of each child node to the root with respect to the "visit count".
-        """
-
-        weighted_values = self.value_sum_buffer * self.visit_buffer
-        return weighted_values.sum() / self.visit_buffer.sum()
-
-    @torch.no_grad()
-    def _get_highest_value_action(self):
-        """The highest value action corresponds to the walker whom has the highest average estimated value."""
-
-        self.walker_values = self.value_sum_buffer / self.visit_buffer
-        highest_value_walker_index = torch.argmax(self.walker_values)
-        highest_value_action = (
-            self.root_actions[highest_value_walker_index].cpu().numpy()
-        )
-
-        return highest_value_action
+        walker_index = self.cumulative_rewards.argmax(0)
+        return self.root_actions[walker_index]
 
     @torch.no_grad()
     def _get_action_with_highest_clone_receives(self):
         # TODO: docstring
         most_cloned_to_walker = torch.argmax(self.clone_receives)
-        return self.root_actions[most_cloned_to_walker, 0].cpu().numpy()
+        return self.root_actions[most_cloned_to_walker]
+
+    def _clone(self, subject):
+        if isinstance(subject, torch.Tensor):
+            return self._clone_vector(subject)
+        elif isinstance(subject, list):
+            return self._clone_list(subject)
+        raise NotImplementedError
 
     def _clone_vector(self, vector: torch.Tensor):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
+        return vector
+
+    def _clone_list(self, l: List, copy: bool = False):
+        new_list = []
+        for i in range(self.num_walkers):
+            do_clone = self.clone_mask[i]
+            partner = self.clone_partners[i]
+
+            if do_clone:
+                # NOTE: may not need to deepcopy.
+                if copy:
+                    new_list.append(deepcopy(l[partner]))
+                else:
+                    new_list.append(l[partner])
+            else:
+                new_list.append(l[i])
+        return new_list
+
+    def _clone_actions(self):
+        new_leaf_actions = []
+        new_root_actions = []
+
+        for i in range(self.num_walkers):
+            do_clone = self.clone_mask[i]
+            partner = self.clone_partners[i]
+
+            if do_clone:
+                # NOTE: may not need to deepcopy.
+                new_leaf_actions.append(deepcopy(self.actions[partner]))
+                new_root_actions.append(deepcopy(self.root_actions[partner]))
+            else:
+                new_leaf_actions.append(self.actions[i])
+                new_root_actions.append(self.root_actions[i])
+
+        self.actions = new_leaf_actions
+        self.root_actions = new_root_actions
 
     def log(self, *args, **kwargs):
         # TODO: separate logger class

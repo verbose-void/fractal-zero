@@ -25,19 +25,14 @@ CONSTANT_LR_CONFIG = {
 
 @dataclass
 class FMCConfig:
-    gamma: float = 0.99
     num_walkers: int = 8
     balance: float = 1
 
     track_game_tree: bool = True
     use_policy_for_action_selection: bool = False
 
-    # when True the lookahead search uses the environment directly (AlphaZero Style).
-    # when False, the lookahead search uses a DynamicsModel instead of the environment (MuZero Style).
-    search_using_actual_environment: bool = True
-
     backprop_strategy: str = "all"  # all, clone_mask, or clone_participants
-    clone_strategy: str = "cumulative_reward"  # predicted_values or cumulative_reward
+    clone_strategy: str = "cumulative_reward"  # cumulative_reward
 
     use_wandb: bool = False
 

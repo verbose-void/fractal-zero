@@ -4,11 +4,22 @@ import torch
 import torch.nn.functional as F
 
 
-def kl_divergence_of_model_paramters(p0, p1):
+def parameters_norm(parameters):
+    c = 0
+    total = 0
+    for param in parameters:
+        total += torch.linalg.norm(param)
+        c += 1
+    return total / c
+
+
+def dist_of_model_paramters(p0, p1):
     total = 0
     c = 0
     for param0, param1 in zip(p0, p1):
-        total += F.kl_div(param0, param1)
+        p0 = param0.data.flatten()
+        p1 = param1.data.flatten()
+        total += torch.linalg.norm(p0 - p1)  # euclidean distance
         c += 1
     return total / c
 
@@ -32,25 +43,3 @@ def mean_min_max_dict(name: str, arr) -> dict:
         f"{name}/min": arr.min(),
         f"{name}/max": arr.max(),
     }
-
-
-def _cast_then_mse(y, t) -> float:
-    return F.mse_loss(y.float(), t.float())
-
-
-def get_space_distance_function(space: gym.Space):
-    # TODO: docstring
-
-    if isinstance(space, gym.spaces.Tuple):
-        raise NotImplementedError
-
-    if isinstance(space, gym.spaces.Dict):
-        raise NotImplementedError
-
-    if isinstance(space, gym.spaces.Box):
-        return F.mse_loss
-
-    if isinstance(space, gym.spaces.Discrete):
-        return _cast_then_mse
-
-    raise NotImplementedError

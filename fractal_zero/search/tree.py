@@ -20,7 +20,7 @@ class StateNode:
         return f"{self.num_child_walkers}"
 
     def __repr__(self):
-        return self.__str__
+        return self.__str__()
 
 
 class Path:
@@ -67,7 +67,7 @@ class Path:
 
     @property
     def total_reward(self):
-        return sum([s.reward for s in self.ordered_states])
+        return float(sum([s.reward for s in self.ordered_states]))
 
     @property
     def last_node(self):
