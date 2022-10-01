@@ -250,7 +250,7 @@ class FractalMuZeroDiscriminatorTrainer:
         loss = 0
         for x, t, _ in zip(*batch):
             action_target = self.policy_model.parse_action(t)
-            y = self.policy_model(x)
+            y = self.policy_model(x.float())
             loss += self.action_space_loss(y, action_target)
             c += 1
         return loss / c
