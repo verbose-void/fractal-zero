@@ -3,12 +3,15 @@ import numpy as np
 
 from fractal_zero.search.tree import GameTree, StateNode
 
+import wandb
+
 
 class TreeSampler:
-    def __init__(self, tree: GameTree, sample_type: str="all_nodes", weight_type: str="walker_children_ratio"):
+    def __init__(self, tree: GameTree, sample_type: str="all_nodes", weight_type: str="walker_children_ratio", use_wandb: bool=False):
         self.tree = tree
         self.sample_type = sample_type
         self.weight_type = weight_type
+        self.use_wandb = use_wandb
 
         if not self.tree.prune:
             raise NotImplementedError("TreeSampling on an unpruned tree has not been considered.")
@@ -65,7 +68,7 @@ class TreeSampler:
 
             observations.append(node.observation)
             child_actions.append(actions)
-            child_weights.append(torch.tensor(weights).float())
+            child_weights.append(weights)
 
         return observations, child_actions, child_weights
         
@@ -80,6 +83,16 @@ class TreeSampler:
         # sanity check
         if not (len(obs) == len(acts) == len(weights)):
             raise ValueError(f"Got different lengths for batch return: {len(obs)}, {len(acts)}, {len(weights)}.")
+
+        if self.use_wandb and wandb.run:
+            mean_weight = np.mean([np.mean(w) for w in weights])
+            mean_num_actions = np.mean([len(act) for act in acts])
+
+            wandb.log({
+                "tree_sampler/mean_weights": mean_weight,
+                "tree_sampler/num_samples": len(obs),
+                "tree_sampler/mean_num_actions": mean_num_actions,
+            })
 
         return obs, acts, weights
         
