@@ -66,8 +66,12 @@ class Path:
             self.ordered_states[i] = new_state
 
     @property
-    def total_reward(self):
+    def total_reward(self) -> float:
         return float(sum([s.reward for s in self.ordered_states]))
+
+    @property
+    def average_reward(self) -> float:
+        return self.total_reward / len(self)
 
     @property
     def last_node(self):
