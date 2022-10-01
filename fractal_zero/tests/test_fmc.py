@@ -10,7 +10,6 @@ from fractal_zero.vectorized_environment import (
     VectorizedDynamicsModelEnvironment,
 )
 
-from fractal_zero.tests.test_vectorized_environment import build_test_joint_model
 import pytest
 
 
