@@ -9,6 +9,9 @@ class ExpertDataset:
     def sample_trajectory(self, max_steps: int = None):
         raise NotImplementedError
 
+    def sample_batch(self, batch_size: int, max_steps: int = None):
+        raise NotImplementedError
+
 
 class ExpertDatasetGenerator(ExpertDataset):
     def __init__(
@@ -50,3 +53,14 @@ class ExpertDatasetGenerator(ExpertDataset):
         t = torch.tensor(actions, dtype=float)
 
         return x, t
+
+    def sample_batch(self, num_trajectories: int, max_steps: int):
+        observations = []
+        actions = []
+        labels = []
+        for _ in range(num_trajectories):
+            expert_x, expert_y = self.sample_trajectory(max_steps)
+            observations.append(expert_x)
+            actions.append(expert_y)
+            labels.append(torch.ones(expert_x.shape[0], dtype=float))
+        return observations, actions, labels

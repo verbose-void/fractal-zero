@@ -8,6 +8,8 @@ from fractal_zero.data.expert_dataset import ExpertDataset
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.search.fmc import FMC
 
+import wandb
+
 from fractal_zero.vectorized_environment import (
     VectorizedDynamicsModelEnvironment,
     VectorizedEnvironment,
@@ -169,7 +171,7 @@ class FractalMuZeroDiscriminatorTrainer:
 
         # TODO: maybe incorporate policy model? or maybe we can just use FMC to search?
 
-        lookahead_steps = 1
+        lookahead_steps = 64
 
         observations = []
         actions = []
@@ -198,33 +200,35 @@ class FractalMuZeroDiscriminatorTrainer:
 
         return x, y
 
-    def generate_batch(self, max_steps: int):
-        self.model_environment.eval()
-
-        num_samples = 4  # 4 of each per batch
-
-        all_observations = []
-        all_actions = []
+    def _get_agent_batch(self, batch_size: int, max_steps: int):
+        observations = []
+        actions = []
         labels = []
-
-        for _ in range(num_samples):
+        for _ in range(batch_size):
             agent_x, agent_y = self._get_agent_trajectory(max_steps)
-            all_observations.append(agent_x)
-            all_actions.append(agent_y)
+            observations.append(agent_x)
+            actions.append(agent_y)
             labels.append(torch.zeros(agent_x.shape[0], dtype=float))
+        return observations, actions, labels
 
-            expert_x, expert_y = self.expert_dataset.sample_trajectory(max_steps)
-            all_observations.append(expert_x)
-            all_actions.append(expert_y)
-            labels.append(torch.ones(expert_x.shape[0], dtype=float))
+    def generate_batches(self, max_steps: int):
+        self.model_environment.eval()
+        batch_size_per_class = 4   # TODO: config
+        self.agent_batch = self._get_agent_batch(batch_size_per_class, max_steps)
+        self.expert_batch = self.expert_dataset.sample_batch(batch_size_per_class, max_steps)
 
-        self.batch = (all_observations, all_actions, labels)
+        if wandb.run:
+            amean_steps = np.mean([len(o) for o in self.agent_batch[0]])
+            emean_steps = np.mean([len(o) for o in self.expert_batch[0]])
+            wandb.log({
+                "batches/agent_mean_steps": amean_steps,
+                "batches/expert_mean_steps": emean_steps,
+            })
 
-    def _get_discriminator_train_loss(self):
-        self.model_environment.train()
-        loss = 0
+    def _get_discriminator_loss(self, batch):
         c = 0
-        for x, y, labels in zip(*self.batch):
+        loss = 0
+        for x, y, labels in zip(*batch):
             # TODO: config for self consistency loss
             (
                 confusions,
@@ -232,8 +236,7 @@ class FractalMuZeroDiscriminatorTrainer:
             ) = self.model_environment.discriminate_single_trajectory(x.float(), y.float())
             loss += F.mse_loss(confusions, labels)
             c += 1
-        loss /= c
-        return loss
+        return loss / c
 
     def train_step(self):
         self.model_environment.train()
@@ -247,9 +250,18 @@ class FractalMuZeroDiscriminatorTrainer:
         # TODO: both should OPTIONALLY share the dynamics function backbone. if the gen and discrim should NOT have
         # a shared backbone, the policy model's dynamics function should be used by FMC.
 
-        discriminator_loss = self._get_discriminator_train_loss()
+        agent_loss = self._get_discriminator_loss(self.agent_batch)
+        expert_loss = self._get_discriminator_loss(self.expert_batch)
+        discriminator_loss = (agent_loss + expert_loss) / 2
+
         discriminator_loss.backward()
-        
         self.optimizer.step()
+
+        if wandb.run:
+            wandb.log({
+                "discriminator/train_loss": discriminator_loss,
+                "discriminator/agent_loss": agent_loss,
+                "discriminator/expert_loss": expert_loss,
+            })
 
         return discriminator_loss.item()
