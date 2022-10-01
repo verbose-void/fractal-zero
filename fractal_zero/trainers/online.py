@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 import gym
 import wandb
+from fractal_zero.data.tree_sampler import TreeSampler
 
 from fractal_zero.loss.space_loss import get_space_loss
 from fractal_zero.search.fmc import FMC
@@ -56,63 +57,13 @@ class OnlineFMCPolicyTrainer:
     def generate_episode_data(self, max_steps: int):
         self.vec_env.batch_reset()
 
-        self.fmc = FMC(self.vec_env, config=self.fmc_config)  # , policy_model=self.policy_model)
-        self.fmc.simulate(max_steps)
+        self.fmc = FMC(self.vec_env, config=self.fmc_config)
+        self.sampler = TreeSampler(self.fmc.tree, sample_type="all_nodes")
 
-    def _get_best_only_batch(self):
-        observations = []
-        actions = []
-
-        path = self.fmc.tree.best_path
-        for state, action in path:
-            # obs = torch.tensor(state.observation)
-            observations.append(state.observation)
-            actions.append([action])
-
-        # x = torch.stack(observations).float()
-        # t = torch.tensor(actions)
-        # return [x], [t]
-
-        # TODO: instead of using weights, use the visit counts!
-        weights = torch.ones((1, 1, len(observations))).float()
-
-        return observations, actions, weights
-
-    def _get_batch(self):
         if not self.fmc.tree:
             raise ValueError("FMC is not tracking walker paths.")
 
-        # TODO: config
-        best_only = False
-
-        if best_only:
-            return self._get_best_only_batch()
-
-        # convert the game tree into a weighted set of targets, based on the visit counts
-
-        observations = []
-        child_actions = []
-        child_weights = []
-
-        g = self.fmc.tree.g
-        for node in g.nodes:
-            observations.append(node.observation)
-
-            actions = []
-            weights = []
-            for _, child_node, data in g.out_edges(node, data=True):
-                # TODO: make this measure based on a proprotion of total clone receives?
-                weight = child_node.num_child_walkers / self.fmc.num_walkers
-
-                weights.append(weight)
-
-                action = data["action"]
-                actions.append(action)
-
-            child_actions.append(actions)
-            child_weights.append(torch.tensor(weights).float())
-
-        return observations, child_actions, child_weights
+        self.fmc.simulate(max_steps)
 
     def _general_loss(self, action, action_targets, action_weights):
         # TODO: vectorize better (if possible?)
@@ -128,9 +79,7 @@ class OnlineFMCPolicyTrainer:
         # TODO: make more efficient somehow?
         self.params_before = deepcopy(list(self.policy_model.parameters()))
 
-        observations, actions, weights = self._get_batch()
-        # assert len(observations) == len(actions) == len(weights)
-        assert len(observations) == len(actions)
+        observations, actions, weights = self.sampler.get_batch()
 
         # NOTE: loss for trajectories of weighted multi-target actions
         loss = 0
