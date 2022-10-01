@@ -27,17 +27,18 @@ class FMZGModel(VectorizedEnvironment):
 
     def __init__(
         self,
+        env: Union[str, gym.Env],
         representation_model: torch.nn.Module,
         dynamics_model: torch.nn.Module,
         discriminator_model: torch.nn.Module,
         num_walkers: int,
         action_vectorizer: Callable,
     ):
+        super().__init__(env, num_walkers)
+
         self.representation = representation_model
         self.dynamics = dynamics_model
         self.discriminator = discriminator_model
-
-        self.n = num_walkers
 
         # TODO: refac?
         self.action_vectorizer = action_vectorizer
@@ -91,7 +92,8 @@ class FMZGModel(VectorizedEnvironment):
         self.dones = torch.zeros(x.shape[0], dtype=bool)
 
         infos = None
-        return self.states, self.current_reward, self.dones, infos
+        observations = self.states
+        return self.states, observations, self.current_reward, self.dones, infos
 
     def batched_action_space_sample(self):
         action_list = super().batched_action_space_sample()
@@ -166,15 +168,14 @@ class FractalMuZeroDiscriminatorTrainer:
         self.model_environment.set_all_states(obs)
 
         # TODO: maybe incorporate policy model? or maybe we can just use FMC to search?
-        self.fmc = FMC(self.model_environment, balance=1)
 
-        lookahead_steps = 8
+        lookahead_steps = 1
 
         observations = []
         actions = []
 
         for _ in range(max_steps):
-            self.fmc.reset()
+            self.fmc = FMC(self.model_environment)
 
             observations.append(torch.tensor(obs, dtype=float))
 
@@ -197,23 +198,46 @@ class FractalMuZeroDiscriminatorTrainer:
 
         return x, y
 
-    def _get_expert_batch(self):
-        # TODO
-        raise NotImplementedError
+    def generate_batch(self, max_steps: int):
+        self.model_environment.eval()
 
-    def _discriminator_train_step(self):
-        # TODO
-        raise NotImplementedError
+        num_samples = 4  # 4 of each per batch
 
-    def train_step(self, max_steps: int):
+        all_observations = []
+        all_actions = []
+        labels = []
+
+        for _ in range(num_samples):
+            agent_x, agent_y = self._get_agent_trajectory(max_steps)
+            all_observations.append(agent_x)
+            all_actions.append(agent_y)
+            labels.append(torch.zeros(agent_x.shape[0], dtype=float))
+
+            expert_x, expert_y = self.expert_dataset.sample_trajectory(max_steps)
+            all_observations.append(expert_x)
+            all_actions.append(expert_y)
+            labels.append(torch.ones(expert_x.shape[0], dtype=float))
+
+        self.batch = (all_observations, all_actions, labels)
+
+    def _get_discriminator_train_loss(self):
+        self.model_environment.train()
+        loss = 0
+        c = 0
+        for x, y, labels in zip(*self.batch):
+            # TODO: config for self consistency loss
+            (
+                confusions,
+                consistency,
+            ) = self.model_environment.discriminate_single_trajectory(x.float(), y.float())
+            loss += F.mse_loss(confusions, labels)
+            c += 1
+        loss /= c
+        return loss
+
+    def train_step(self):
         self.model_environment.train()
         self.optimizer.zero_grad()
-
-        agent_x, agent_y = self._get_agent_trajectory(max_steps)
-        expert_x, expert_y = self.expert_dataset.sample_trajectory(max_steps)
-
-        assert len(agent_x) == len(agent_y)
-        assert len(expert_x) == len(expert_y)
 
         # TODO: instead of having the discriminator discriminate directly against FMC,
         # have it discriminate against a
@@ -223,35 +247,9 @@ class FractalMuZeroDiscriminatorTrainer:
         # TODO: both should OPTIONALLY share the dynamics function backbone. if the gen and discrim should NOT have
         # a shared backbone, the policy model's dynamics function should be used by FMC.
 
-        (
-            agent_confusions,
-            agent_consistency,
-        ) = self.model_environment.discriminate_single_trajectory(
-            agent_x.float(),
-            agent_y.float(),
-        )
-        (
-            expert_confusions,
-            expert_consistency,
-        ) = self.model_environment.discriminate_single_trajectory(
-            expert_x.float(),
-            expert_y.float(),
-        )
-
-        assert len(agent_confusions) == len(agent_x)
-
-        agent_t = torch.zeros(agent_x.shape[0], dtype=float)
-        expert_t = torch.ones(expert_x.shape[0], dtype=float)
-
-        loss = 0
-
-        loss += F.mse_loss(agent_confusions, agent_t)
-        loss += F.mse_loss(expert_confusions, expert_t)
-
-        # TODO: config for self consistency loss
-        # loss += (agent_consistency + expert_consistency) / 2
-
-        loss.backward()
+        discriminator_loss = self._get_discriminator_train_loss()
+        discriminator_loss.backward()
+        
         self.optimizer.step()
 
-        return loss.item()
+        return discriminator_loss.item()
