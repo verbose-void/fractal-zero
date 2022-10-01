@@ -17,7 +17,9 @@ import pytest
 NUM_WALKERS = 16
 
 
-with_vec_envs = pytest.mark.parametrize("vec_env_class", [SerialVectorizedEnvironment, RayVectorizedEnvironment])
+with_vec_envs = pytest.mark.parametrize(
+    "vec_env_class", [SerialVectorizedEnvironment, RayVectorizedEnvironment]
+)
 
 
 @with_vec_envs

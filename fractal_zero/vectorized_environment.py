@@ -70,15 +70,20 @@ class _RayWrappedEnvironment:
     def get_action_space(self):
         return self._env.action_space
 
+
 class RayVectorizedEnvironment(VectorizedEnvironment):
     envs: List[_RayWrappedEnvironment]
 
-    def __init__(self, env: Union[str, gym.Env], n: int, observation_encoder: Callable=None):
+    def __init__(
+        self, env: Union[str, gym.Env], n: int, observation_encoder: Callable = None
+    ):
         super().__init__(env, n)
 
         # TODO: explain
-        self.observation_encoder = observation_encoder if observation_encoder else torch.tensor
-        
+        self.observation_encoder = (
+            observation_encoder if observation_encoder else torch.tensor
+        )
+
         self.envs = [_RayWrappedEnvironment.remote(env) for _ in range(n)]
 
     def batch_reset(self, *args, **kwargs):
@@ -103,7 +108,7 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             rewards.append(rew)
             dones.append(done)
             infos.append(info)
-        
+
         states = self.observation_encoder(observations)
 
         return (
@@ -146,12 +151,16 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
 class SerialVectorizedEnvironment(VectorizedEnvironment):
     envs: List[gym.Env]
 
-    def __init__(self, env: Union[str, gym.Env], n: int, observation_encoder: Callable=None):
+    def __init__(
+        self, env: Union[str, gym.Env], n: int, observation_encoder: Callable = None
+    ):
         super().__init__(env, n)
 
         # TODO: explain
-        self.observation_encoder = observation_encoder if observation_encoder else torch.tensor
-        
+        self.observation_encoder = (
+            observation_encoder if observation_encoder else torch.tensor
+        )
+
         self.envs = [load_environment(env, copy=True) for _ in range(n)]
 
     def batch_reset(self, *args, **kwargs):
@@ -167,12 +176,12 @@ class SerialVectorizedEnvironment(VectorizedEnvironment):
         for i, env in enumerate(self.envs):
             action = actions[i]
             obs, rew, done, info = env.step(action, *args, **kwargs)
-            
+
             observations.append(obs)
             rewards.append(rew)
             dones.append(done)
             infos.append(info)
-        
+
         states = self.observation_encoder(observations)
 
         return (

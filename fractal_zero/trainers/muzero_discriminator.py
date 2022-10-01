@@ -8,22 +8,26 @@ from fractal_zero.data.expert_dataset import ExpertDataset
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.search.fmc import FMC
 
-from fractal_zero.vectorized_environment import VectorizedDynamicsModelEnvironment, VectorizedEnvironment, load_environment
+from fractal_zero.vectorized_environment import (
+    VectorizedDynamicsModelEnvironment,
+    VectorizedEnvironment,
+    load_environment,
+)
 
 
 class FMZGModel(VectorizedEnvironment):
     action_space: gym.Space
 
     # TODO: actual docstring:
-        # the representation model takes the raw obesrvation and puts it into an embedding. this representation model MAY be
-        #   a transformer or some sort of recurrent model, in the future.
-        # the dynamics model is given the state and action embeddings and returns a new state embedding
-        # the discriminator model is given the embedding of the new state (from the dynamics model) and returns 
-        #   a float reward between 0 and 1 (0=agent, 1=expert)
+    # the representation model takes the raw obesrvation and puts it into an embedding. this representation model MAY be
+    #   a transformer or some sort of recurrent model, in the future.
+    # the dynamics model is given the state and action embeddings and returns a new state embedding
+    # the discriminator model is given the embedding of the new state (from the dynamics model) and returns
+    #   a float reward between 0 and 1 (0=agent, 1=expert)
 
     def __init__(
-        self, 
-        representation_model: torch.nn.Module, 
+        self,
+        representation_model: torch.nn.Module,
         dynamics_model: torch.nn.Module,
         discriminator_model: torch.nn.Module,
         num_walkers: int,
@@ -55,7 +59,7 @@ class FMZGModel(VectorizedEnvironment):
 
     def _check_states(self):
         if self.initial_states is None:
-            raise ValueError("Must call \"set_all_states\" before stepping.")
+            raise ValueError('Must call "set_all_states" before stepping.')
 
     def batch_reset(self):
         # NOTE: does nothing...?
@@ -81,12 +85,14 @@ class FMZGModel(VectorizedEnvironment):
         x = torch.cat((self.states.float(), embedded_actions.float()), dim=-1)
         self.states = self.dynamics.forward(x)
 
-        self.current_reward = self.discriminator.forward(x)  # NOTE: `x` IS THE PREVIOUS STATE!
+        self.current_reward = self.discriminator.forward(
+            x
+        )  # NOTE: `x` IS THE PREVIOUS STATE!
         self.dones = torch.zeros(x.shape[0], dtype=bool)
 
         infos = None
         return self.states, self.current_reward, self.dones, infos
-    
+
     def batched_action_space_sample(self):
         action_list = super().batched_action_space_sample()
 
@@ -115,7 +121,7 @@ class FMZGModel(VectorizedEnvironment):
             x = torch.cat((latent_state, embedded_action.unsqueeze(0)), dim=-1)
 
             latent_state = self.dynamics.forward(x)
-            
+
             confusion = self.discriminator.forward(x)
             confusions[step] = confusion
 
@@ -126,11 +132,9 @@ class FMZGModel(VectorizedEnvironment):
         return confusions, self_consistencies.mean()
 
 
-
 class FractalMuZeroDiscriminatorTrainer:
-
     def __init__(
-        self, 
+        self,
         env: Union[str, gym.Env],
         model_environment: FMZGModel,
         expert_dataset: ExpertDataset,
@@ -211,12 +215,6 @@ class FractalMuZeroDiscriminatorTrainer:
         assert len(agent_x) == len(agent_y)
         assert len(expert_x) == len(expert_y)
 
-
-
-
-
-
-
         # TODO: instead of having the discriminator discriminate directly against FMC,
         # have it discriminate against a
         #  policy model being trained by FMC?
@@ -225,12 +223,18 @@ class FractalMuZeroDiscriminatorTrainer:
         # TODO: both should OPTIONALLY share the dynamics function backbone. if the gen and discrim should NOT have
         # a shared backbone, the policy model's dynamics function should be used by FMC.
 
-        agent_confusions, agent_consistency = self.model_environment.discriminate_single_trajectory(
-            agent_x.float(), 
+        (
+            agent_confusions,
+            agent_consistency,
+        ) = self.model_environment.discriminate_single_trajectory(
+            agent_x.float(),
             agent_y.float(),
         )
-        expert_confusions, expert_consistency = self.model_environment.discriminate_single_trajectory(
-            expert_x.float(), 
+        (
+            expert_confusions,
+            expert_consistency,
+        ) = self.model_environment.discriminate_single_trajectory(
+            expert_x.float(),
             expert_y.float(),
         )
 
@@ -246,7 +250,7 @@ class FractalMuZeroDiscriminatorTrainer:
 
         # TODO: config for self consistency loss
         # loss += (agent_consistency + expert_consistency) / 2
-        
+
         loss.backward()
         self.optimizer.step()
 

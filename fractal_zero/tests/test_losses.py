@@ -4,7 +4,12 @@ import gym.spaces as spaces
 import torch
 import torch.nn.functional as F
 
-from fractal_zero.loss.space_loss import BoxSpaceLoss, DictSpaceLoss, DiscreteSpaceLoss, SpaceLoss
+from fractal_zero.loss.space_loss import (
+    BoxSpaceLoss,
+    DictSpaceLoss,
+    DiscreteSpaceLoss,
+    SpaceLoss,
+)
 
 
 def _general_assertions(space: spaces.Space, criterion: SpaceLoss):
@@ -25,12 +30,12 @@ def _general_assertions(space: spaces.Space, criterion: SpaceLoss):
     # TODO: out of range warning?
 
 
-
 def test_box():
     space = spaces.Box(low=0, high=2, shape=(5, 3))
     criterion = BoxSpaceLoss(space)
 
     _general_assertions(space, criterion)
+
 
 def test_discrete():
     space = spaces.Discrete(5)
@@ -49,7 +54,10 @@ def test_discrete():
     loss.backward()
 
     # batch
-    blogits = torch.tensor([[0, 0.1, 0.5, 1, 1], [0, 0.1, 0.5, 1, 1], [0, 0.1, 0.5, 1, 1]], requires_grad=True)
+    blogits = torch.tensor(
+        [[0, 0.1, 0.5, 1, 1], [0, 0.1, 0.5, 1, 1], [0, 0.1, 0.5, 1, 1]],
+        requires_grad=True,
+    )
     btarget = [space.sample() for _ in range(3)]
     bloss = criterion(blogits, btarget)
     print("bloss", bloss)
@@ -62,10 +70,12 @@ def test_discrete_dict():
 
     # define a DictLoss with different loss functions for Discrete spaces.
     criterion = DictSpaceLoss(
-        spaces.Dict({
-            "space0": space,
-            "subspace": spaces.Dict({"space1": space}),
-        }),
+        spaces.Dict(
+            {
+                "space0": space,
+                "subspace": spaces.Dict({"space1": space}),
+            }
+        ),
         loss_spec={
             "space0": F.mse_loss,  # if this was None, should be default
             "subspace": {"space1": F.cross_entropy},
@@ -78,7 +88,9 @@ def test_discrete_dict():
     space1_sample = torch.tensor([[0.1, 0.4, 0.5], [0.1, 0.3, 0.2]], requires_grad=True)
     space1_target = torch.tensor([2, 1])
 
-    expected_loss = F.mse_loss(space0_sample, space0_target) + F.cross_entropy(space1_sample, space1_target)
+    expected_loss = F.mse_loss(space0_sample, space0_target) + F.cross_entropy(
+        space1_sample, space1_target
+    )
 
     y = {"space0": space0_sample, "subspace": {"space1": space1_sample}}
     t = {"space0": space0_target, "subspace": {"space1": space1_target}}
@@ -88,20 +100,26 @@ def test_discrete_dict():
     print(expected_loss, actual_loss)
     assert torch.isclose(expected_loss, actual_loss)
 
+
 def test_dict():
-    space = gym.spaces.Dict({
-        "x": gym.spaces.Discrete(4),
-        "y": gym.spaces.Box(low=0, high=1, shape=(2,)),
-    })
+    space = gym.spaces.Dict(
+        {
+            "x": gym.spaces.Discrete(4),
+            "y": gym.spaces.Box(low=0, high=1, shape=(2,)),
+        }
+    )
 
     space.seed(5)
     criterion = DictSpaceLoss(space)
 
-    a0 = {"x": torch.tensor(3.0, requires_grad=True), "y": torch.tensor([0.3, 0.1], requires_grad=True)}
+    a0 = {
+        "x": torch.tensor(3.0, requires_grad=True),
+        "y": torch.tensor([0.3, 0.1], requires_grad=True),
+    }
     a1 = space.sample()
 
     loss = criterion(a0, a1)
-    
+
     print(a0)
     print(a1)
     print(loss)

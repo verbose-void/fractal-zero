@@ -7,14 +7,22 @@ import wandb
 
 
 class TreeSampler:
-    def __init__(self, tree: GameTree, sample_type: str="all_nodes", weight_type: str="walker_children_ratio", use_wandb: bool=False):
+    def __init__(
+        self,
+        tree: GameTree,
+        sample_type: str = "all_nodes",
+        weight_type: str = "walker_children_ratio",
+        use_wandb: bool = False,
+    ):
         self.tree = tree
         self.sample_type = sample_type
         self.weight_type = weight_type
         self.use_wandb = use_wandb
 
         if not self.tree.prune:
-            raise NotImplementedError("TreeSampling on an unpruned tree has not been considered.")
+            raise NotImplementedError(
+                "TreeSampling on an unpruned tree has not been considered."
+            )
 
     def _calculate_weight(self, node: StateNode) -> float:
         if self.weight_type == "walker_children_ratio":
@@ -71,7 +79,7 @@ class TreeSampler:
             child_weights.append(weights)
 
         return observations, child_actions, child_weights
-        
+
     def get_batch(self):
         if self.sample_type == "best_path":
             obs, acts, weights = self._get_best_path_as_batch()
@@ -82,17 +90,20 @@ class TreeSampler:
 
         # sanity check
         if not (len(obs) == len(acts) == len(weights)):
-            raise ValueError(f"Got different lengths for batch return: {len(obs)}, {len(acts)}, {len(weights)}.")
+            raise ValueError(
+                f"Got different lengths for batch return: {len(obs)}, {len(acts)}, {len(weights)}."
+            )
 
         if self.use_wandb and wandb.run:
             mean_weight = np.mean([np.mean(w) for w in weights])
             mean_num_actions = np.mean([len(act) for act in acts])
 
-            wandb.log({
-                "tree_sampler/mean_weights": mean_weight,
-                "tree_sampler/num_samples": len(obs),
-                "tree_sampler/mean_num_actions": mean_num_actions,
-            })
+            wandb.log(
+                {
+                    "tree_sampler/mean_weights": mean_weight,
+                    "tree_sampler/num_samples": len(obs),
+                    "tree_sampler/mean_num_actions": mean_num_actions,
+                }
+            )
 
         return obs, acts, weights
-        

@@ -33,7 +33,7 @@ class OnlineFMCPolicyTrainer:
         optimizer: torch.optim.Optimizer,
         num_walkers: int,
         observation_encoder: Callable = None,
-        loss_spec = None,
+        loss_spec=None,
         fmc_config: FMCConfig = None,
         use_ray: bool = False,
     ):
@@ -41,9 +41,13 @@ class OnlineFMCPolicyTrainer:
 
         # TODO: config option
         if use_ray:
-            self.vec_env = RayVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
+            self.vec_env = RayVectorizedEnvironment(
+                env, num_walkers, observation_encoder=observation_encoder
+            )
         else:
-            self.vec_env = SerialVectorizedEnvironment(env, num_walkers, observation_encoder=observation_encoder)
+            self.vec_env = SerialVectorizedEnvironment(
+                env, num_walkers, observation_encoder=observation_encoder
+            )
 
         self.policy_model = policy_model
         self.optimizer = optimizer
@@ -58,7 +62,12 @@ class OnlineFMCPolicyTrainer:
         self.vec_env.batch_reset()
 
         self.fmc = FMC(self.vec_env, config=self.fmc_config)
-        self.sampler = TreeSampler(self.fmc.tree, sample_type="all_nodes", weight_type="walker_children_ratio", use_wandb=True)
+        self.sampler = TreeSampler(
+            self.fmc.tree,
+            sample_type="all_nodes",
+            weight_type="walker_children_ratio",
+            use_wandb=True,
+        )
 
         if not self.fmc.tree:
             raise ValueError("FMC is not tracking walker paths.")
@@ -85,11 +94,11 @@ class OnlineFMCPolicyTrainer:
         loss = 0
         action_predictions = self.policy_model.forward(observations)
         for y, action_targets, action_weights in zip(
-            action_predictions, actions, weights,
+            action_predictions,
+            actions,
+            weights,
         ):
-            trajectory_loss = self._general_loss(
-                y, action_targets, action_weights
-            )
+            trajectory_loss = self._general_loss(y, action_targets, action_weights)
             loss += trajectory_loss
         loss = loss / len(observations)
 
@@ -99,7 +108,9 @@ class OnlineFMCPolicyTrainer:
         self._log_last_train_step(loss.item())
         return loss.item()
 
-    def evaluate_policy(self, max_steps: int, render: bool = False, evaluate_best_policy: bool = False):
+    def evaluate_policy(
+        self, max_steps: int, render: bool = False, evaluate_best_policy: bool = False
+    ):
         policy = self.best_model if evaluate_best_policy else self.policy_model
 
         policy.eval()
@@ -159,7 +170,7 @@ class OnlineFMCPolicyTrainer:
             }
         )
 
-    def replay_best(self, render: bool=False):
+    def replay_best(self, render: bool = False):
         _, actions = self._get_best_only_batch()
         self.env.reset()
 

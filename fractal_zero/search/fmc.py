@@ -93,7 +93,9 @@ class FMC:
 
     def _validate_config(self):
         if self.config.use_policy_for_action_selection:
-            raise NotImplementedError("Using policy functions to sample walker actions not yet supported.")
+            raise NotImplementedError(
+                "Using policy functions to sample walker actions not yet supported."
+            )
         self._validate_num_walkers()
 
     @property
@@ -288,7 +290,9 @@ class FMC:
         self.root_actions = self._clone(self.root_actions)
         self.cumulative_rewards = self._clone(self.cumulative_rewards)
         self.visit_buffer = self._clone(self.visit_buffer)
-        self.clone_receives = self._clone(self.clone_receives)  # yes... clone clone receives lol.
+        self.clone_receives = self._clone(
+            self.clone_receives
+        )  # yes... clone clone receives lol.
 
         if self.tree:
             self.tree.clone(self.clone_partners, self.clone_mask)
@@ -320,7 +324,7 @@ class FMC:
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
         return vector
 
-    def _clone_list(self, l: List, copy: bool=False):
+    def _clone_list(self, l: List, copy: bool = False):
         new_list = []
         for i in range(self.num_walkers):
             do_clone = self.clone_mask[i]

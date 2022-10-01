@@ -26,7 +26,7 @@ class SpaceLoss(ABC):
 class DiscreteSpaceLoss(SpaceLoss):
     def __init__(self, discrete_space: spaces.Discrete, loss_func=None):
 
-        # TODO: can we auto-determine the kind of loss func? 
+        # TODO: can we auto-determine the kind of loss func?
         # TODO: ie. if the incoming sample is obviously logits, maybe
         # TODO: we use F.cross_entropy automatically?
         self.loss_func = loss_func if loss_func else F.mse_loss
@@ -42,7 +42,7 @@ class DiscreteSpaceLoss(SpaceLoss):
     def _cast_y(self, y) -> torch.Tensor:
         if self.loss_func == F.mse_loss:
             return _float_cast(y)
-        
+
         elif self.loss_func == F.cross_entropy:
             return _long_cast(y)
 
@@ -84,7 +84,7 @@ LOSS_CLASSES = {
 
 
 class DictSpaceLoss(SpaceLoss):
-    def __init__(self, dict_space: spaces.Space, loss_spec: Dict=None):
+    def __init__(self, dict_space: spaces.Space, loss_spec: Dict = None):
         self.space = dict_space
         self.loss_spec = loss_spec if loss_spec else {}
         self._build_funcs()
@@ -105,26 +105,30 @@ class DictSpaceLoss(SpaceLoss):
         both_seqs = isinstance(y, Sequence) and isinstance(t, Sequence)
         both_dicts = isinstance(y, Mapping) and isinstance(t, Mapping)
         if not both_seqs and not both_dicts:
-            raise TypeError(f"Type mismatch. Expected both inputs to be matching. Got: {type(y)} and {type(t)}.")
+            raise TypeError(
+                f"Type mismatch. Expected both inputs to be matching. Got: {type(y)} and {type(t)}."
+            )
 
         if both_seqs:
 
             if len(y) != len(t):
-                raise ValueError(f"Expected both inputs to be the same length. Got {len(y)} and {len(t)}.")
+                raise ValueError(
+                    f"Expected both inputs to be the same length. Got {len(y)} and {len(t)}."
+                )
 
             total = 0
             c = 0
             for y_sample, t_sample in zip(y, t):
                 total += self._dict_loss(y_sample, t_sample)
                 c += 1
-            
+
             # TODO: support reduce function instead of always doing mean?
             return total / c
 
         return self._dict_loss(y, t)
 
 
-def get_space_loss(space: spaces.Space, spec: Dict=None) -> SpaceLoss:
+def get_space_loss(space: spaces.Space, spec: Dict = None) -> SpaceLoss:
     if isinstance(space, spaces.Dict):
         return DictSpaceLoss(space, loss_spec=spec)
     return LOSS_CLASSES[type(space)](space, loss_func=spec)

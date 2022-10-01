@@ -19,7 +19,7 @@ def dist_of_model_paramters(p0, p1):
     for param0, param1 in zip(p0, p1):
         p0 = param0.data.flatten()
         p1 = param1.data.flatten()
-        total += torch.linalg.norm(p0-p1)  # euclidean distance
+        total += torch.linalg.norm(p0 - p1)  # euclidean distance
         c += 1
     return total / c
 

@@ -6,15 +6,14 @@ from fractal_zero.vectorized_environment import load_environment
 
 
 class ExpertDataset:
-
     def sample_trajectory(self, max_steps: int = None):
         raise NotImplementedError
 
 
 class ExpertDatasetGenerator(ExpertDataset):
     def __init__(
-        self, 
-        policy_model, 
+        self,
+        policy_model,
         env: Union[str, gym.Env],
         action_vectorizer: Callable,
     ):
