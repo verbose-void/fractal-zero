@@ -228,6 +228,8 @@ class FractalMuZeroDiscriminatorTrainer:
             })
 
     def _get_discriminator_loss(self, batch):
+        self.model_environment.train()
+
         c = 0
         loss = 0
         for x, y, labels in zip(*batch):
@@ -241,7 +243,14 @@ class FractalMuZeroDiscriminatorTrainer:
         return loss / c
 
     def _get_policy_loss(self, batch):
-        raise NotImplementedError
+        self.policy_model.train()
+
+        c = 0
+        for x, y, _ in zip(*batch):
+            raise NotImplementedError
+            c += 1
+
+        return loss / c
 
     def train_step(self):
         self.model_environment.train()
@@ -278,3 +287,6 @@ class FractalMuZeroDiscriminatorTrainer:
             })
 
         return discriminator_loss.item()
+
+    def evaluate_step(self):
+        raise NotImplementedError
