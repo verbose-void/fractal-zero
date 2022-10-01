@@ -58,7 +58,7 @@ class OnlineFMCPolicyTrainer:
         self.vec_env.batch_reset()
 
         self.fmc = FMC(self.vec_env, config=self.fmc_config)
-        self.sampler = TreeSampler(self.fmc.tree, sample_type="all_nodes", use_wandb=True)
+        self.sampler = TreeSampler(self.fmc.tree, sample_type="all_nodes", weight_type="walker_children_ratio", use_wandb=True)
 
         if not self.fmc.tree:
             raise ValueError("FMC is not tracking walker paths.")
