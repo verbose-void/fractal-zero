@@ -141,12 +141,14 @@ class FractalMuZeroDiscriminatorTrainer:
         self,
         env: Union[str, gym.Env],
         model_environment: FMZGModel,
+        policy_model: torch.nn.Module,
         expert_dataset: ExpertDataset,
         optimizer: torch.optim.Optimizer,  # TODO: add check to see if all parameters are inside optimizer (sanity check)
     ):
         # TODO: vectorize the actual environment?
         self.actual_environment = load_environment(env)
         self.model_environment = model_environment
+        self.policy_model = policy_model
 
         self.optimizer = optimizer
 
@@ -238,6 +240,9 @@ class FractalMuZeroDiscriminatorTrainer:
             c += 1
         return loss / c
 
+    def _get_policy_loss(self, batch):
+        raise NotImplementedError
+
     def train_step(self):
         self.model_environment.train()
         self.optimizer.zero_grad()
@@ -249,12 +254,20 @@ class FractalMuZeroDiscriminatorTrainer:
         # and the expert model.
         # TODO: both should OPTIONALLY share the dynamics function backbone. if the gen and discrim should NOT have
         # a shared backbone, the policy model's dynamics function should be used by FMC.
+        
+        loss = 0
 
         agent_loss = self._get_discriminator_loss(self.agent_batch)
         expert_loss = self._get_discriminator_loss(self.expert_batch)
         discriminator_loss = (agent_loss + expert_loss) / 2
+        loss += discriminator_loss
 
-        discriminator_loss.backward()
+        agent_policy_loss = self._get_policy_loss(self.agent_batch)
+        expert_policy_loss = self._get_policy_loss(self.expert_batch)
+        policy_loss = (agent_policy_loss + expert_policy_loss) / 2
+        loss += policy_loss
+
+        loss.backward()
         self.optimizer.step()
 
         if wandb.run:
