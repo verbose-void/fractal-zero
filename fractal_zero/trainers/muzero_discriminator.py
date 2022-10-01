@@ -5,6 +5,7 @@ import numpy as np
 
 from typing import Callable, Union
 from fractal_zero.data.expert_dataset import ExpertDataset
+from fractal_zero.loss.space_loss import get_space_loss
 from fractal_zero.models.joint_model import JointModel
 from fractal_zero.search.fmc import FMC
 
@@ -153,7 +154,9 @@ class FractalMuZeroDiscriminatorTrainer:
         self.optimizer = optimizer
 
         # TODO: refac somehow...?
-        self.model_environment.action_space = self.actual_environment.action_space
+        self.action_space = self.actual_environment.action_space
+        self.model_environment.action_space = self.action_space
+        self.action_space_loss = get_space_loss(self.action_space)
 
         self.expert_dataset = expert_dataset
 
@@ -241,7 +244,14 @@ class FractalMuZeroDiscriminatorTrainer:
         return loss / c
 
     def _get_policy_loss(self, batch):
-        raise NotImplementedError
+        c = 0
+        loss = 0
+        for x, t, _ in zip(*batch):
+            action_target = self.policy_model.parse_action(t)
+            y = self.policy_model(x)
+            loss += self.action_space_loss(y, action_target)
+            c += 1
+        return loss / c
 
     def train_step(self):
         self.model_environment.train()
@@ -275,6 +285,8 @@ class FractalMuZeroDiscriminatorTrainer:
                 "discriminator/train_loss": discriminator_loss,
                 "discriminator/agent_loss": agent_loss,
                 "discriminator/expert_loss": expert_loss,
+                "policy/agent_loss": agent_policy_loss,
+                "policy/expert_loss": expert_policy_loss,
             })
 
         return discriminator_loss.item()
