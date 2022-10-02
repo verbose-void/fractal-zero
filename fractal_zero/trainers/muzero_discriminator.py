@@ -1,4 +1,5 @@
 import gym
+from matplotlib.pyplot import xlim
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -108,7 +109,7 @@ class FMZGModel(VectorizedEnvironment):
     def clone(self, partners, clone_mask):
         self.states[clone_mask] = self.states[partners[clone_mask]]
 
-    def discriminate_single_trajectory(self, observations, embedded_actions):
+    def get_state_embeddings_for_trajectory(self, observations, embedded_actions):
         # TODO: docstring
         # IMPORTANT NOTE: this forward function does not modify the internal self.states variable of the walkers!
 
@@ -117,25 +118,29 @@ class FMZGModel(VectorizedEnvironment):
         assert len(observation_representations) == len(embedded_actions)
 
         steps = embedded_actions.shape[0]
-        confusions = torch.zeros(steps, dtype=float)
+        # confusions = torch.zeros(steps, dtype=float)
         self_consistencies = torch.zeros(steps, dtype=float)
         latent_state = observation_representations[0]
+
+        step_embeddings = torch.zeros((steps, latent_state.numel() + embedded_actions[0].numel()), dtype=float).float()
 
         for step in range(steps):
             embedded_action = embedded_actions[step]
 
             x = torch.cat((latent_state, embedded_action.unsqueeze(0)), dim=-1)
+            step_embeddings[step] = x  # store for head calculations
 
             latent_state = self.dynamics.forward(x)
+            
 
-            confusion = self.discriminator.forward(x)
-            confusions[step] = confusion
+            # confusion = self.discriminator.forward(x)
+            # confusions[step] = confusion
 
             # self consistency is how well the latent representations match with the representation function
             consistency = F.mse_loss(latent_state, observation_representations[step])
             self_consistencies[step] = consistency
 
-        return confusions, self_consistencies.mean()
+        return step_embeddings, self_consistencies
 
 
 class FractalMuZeroDiscriminatorTrainer:
@@ -151,7 +156,7 @@ class FractalMuZeroDiscriminatorTrainer:
         # TODO: vectorize the actual environment?
         self.actual_environment = load_environment(env)
         self.model_environment = model_environment
-        self.policy_model = policy_model
+        self.policy_head = policy_model
 
         self.optimizer = optimizer
 
@@ -166,7 +171,7 @@ class FractalMuZeroDiscriminatorTrainer:
         self.most_reward = float("-inf")
 
     @property
-    def discriminator(self):
+    def discriminator_head(self):
         return self.model_environment.discriminator
 
     @property
@@ -223,7 +228,7 @@ class FractalMuZeroDiscriminatorTrainer:
 
     def generate_batches(self, max_steps: int):
         self.model_environment.eval()
-        batch_size_per_class = 4   # TODO: config
+        batch_size_per_class = 16   # TODO: config
         self.agent_batch = self._get_agent_batch(batch_size_per_class, max_steps)
         self.expert_batch = self.expert_dataset.sample_batch(batch_size_per_class, max_steps)
 
@@ -235,31 +240,59 @@ class FractalMuZeroDiscriminatorTrainer:
                 "batches/expert_mean_steps": emean_steps,
             })
 
-    def _get_discriminator_loss(self, batch):
+    # def _get_discriminator_loss(self, batch):
+    #     self.model_environment.train()
+
+    #     c = 0
+    #     loss = 0
+    #     for x, y, labels in zip(*batch):
+    #         # TODO: config for self consistency loss
+    #         (
+    #             confusions,
+    #             consistency,
+    #         ) = self.model_environment.discriminate_single_trajectory(x.float(), y.float())
+    #         loss += F.mse_loss(confusions, labels)
+    #         c += 1
+    #     return loss / c
+
+    # def _get_policy_loss(self, batch):
+    #     self.policy_model.train()
+
+    #     c = 0
+    #     loss = 0
+    #     for x, t, _ in zip(*batch):
+    #         y = self.policy_model(x.float())
+    #         loss += self.action_space_loss(y, t)
+    #         c += 1
+    #     return loss / c
+
+    def _get_losses(self, batch):
         self.model_environment.train()
+        self.policy_head.train()
 
         c = 0
-        loss = 0
-        for x, y, labels in zip(*batch):
-            # TODO: config for self consistency loss
-            (
-                confusions,
-                consistency,
-            ) = self.model_environment.discriminate_single_trajectory(x.float(), y.float())
-            loss += F.mse_loss(confusions, labels)
-            c += 1
-        return loss / c
+        discriminator_loss = 0
+        policy_loss = 0
+        for observations, embedded_actions, discriminator_labels in zip(*batch):
+            # TODO: use consistencies somehow?
 
-    def _get_policy_loss(self, batch):
-        self.policy_model.train()
+            state_embeddings, consistencies = self.model_environment.get_state_embeddings_for_trajectory(
+                observations.float(), 
+                embedded_actions.float(),
+            )
 
-        c = 0
-        loss = 0
-        for x, t, _ in zip(*batch):
-            y = self.policy_model(x.float())
-            loss += self.action_space_loss(y, t)
+            policy_predictions = self.policy_head(state_embeddings)
+            discrim_confusions = self.discriminator_head(state_embeddings)
+
+            policy_loss += self.action_space_loss(policy_predictions, embedded_actions.float())
+            discriminator_loss += F.mse_loss(discrim_confusions, discriminator_labels.float())
             c += 1
-        return loss / c
+
+        discriminator_loss /= c
+        policy_loss /= c
+
+        return discriminator_loss, policy_loss
+
 
     def train_step(self):
         self.model_environment.train()
@@ -273,18 +306,27 @@ class FractalMuZeroDiscriminatorTrainer:
         # TODO: both should OPTIONALLY share the dynamics function backbone. if the gen and discrim should NOT have
         # a shared backbone, the policy model's dynamics function should be used by FMC.
         
-        loss = 0
+        # loss = 0
 
-        agent_loss = self._get_discriminator_loss(self.agent_batch)
-        expert_loss = self._get_discriminator_loss(self.expert_batch)
-        discriminator_loss = (agent_loss + expert_loss) / 2
-        loss += discriminator_loss
+        # agent_loss = self._get_discriminator_loss(self.agent_batch)
+        # expert_loss = self._get_discriminator_loss(self.expert_batch)
+        # discriminator_loss = (agent_loss + expert_loss) / 2
+        # loss += discriminator_loss
 
-        agent_policy_loss = self._get_policy_loss(self.agent_batch)
+        # agent_policy_loss = self._get_policy_loss(self.agent_batch)
         # expert_policy_loss = self._get_policy_loss(self.expert_batch)
         # policy_loss = (agent_policy_loss + expert_policy_loss) / 2
         # loss += policy_loss
-        loss += agent_policy_loss
+        # loss += agent_policy_loss
+
+        # TODO: explain
+        agent_discrim_loss, agent_policy_loss = self._get_losses(self.agent_batch)
+        expert_discrim_loss, expert_policy_loss = self._get_losses(self.expert_batch)
+
+        discriminator_loss = (agent_discrim_loss + expert_discrim_loss) / 2
+        policy_loss = agent_policy_loss  # TODO: use expert actions for loss too?
+
+        loss = discriminator_loss + policy_loss
 
         loss.backward()
         self.optimizer.step()
@@ -292,36 +334,41 @@ class FractalMuZeroDiscriminatorTrainer:
         if wandb.run:
             wandb.log({
                 "discriminator/train_loss": discriminator_loss,
-                "discriminator/agent_loss": agent_loss,
-                "discriminator/expert_loss": expert_loss,
+                "discriminator/agent_loss": agent_discrim_loss,
+                "discriminator/expert_loss": expert_discrim_loss,
                 "policy/agent_loss": agent_policy_loss,
-                # "policy/expert_loss": expert_policy_loss,
+                "policy/expert_loss": expert_policy_loss,
             })
 
         return discriminator_loss.item()
 
-    @torch.no_grad()
-    def evaluate_step(self, max_steps: int):
-        self.policy_model.eval()
+    # @torch.no_grad()
+    # def evaluate_step(self, max_steps: int):
+    #     self.model_environment.eval()
+    #     self.policy_head.eval()
 
-        rewards = []
+    #     rewards = []
 
-        obs = self.actual_environment.reset()
-        for step in range(max_steps):
-            action = self.policy_model(torch.tensor(obs).float())
-            action = self.policy_model.parse_action(action)
-            obs, reward, done, info = self.actual_environment.step(action)
-            rewards.append(reward)
-            if done:
-                break
+    #     obs = self.actual_environment.reset()
+    #     for step in range(max_steps):
+    #         # TODO: this needs to be refactored for sure
+    #         x = torch.tensor(obs).float()
+    #         x = self.model_environment.representation(x)
+    #         action = self.policy_head(x)
+    #         action = self.policy_head.parse_action(action)
 
-        total_reward = sum(rewards)
-        if total_reward > self.most_reward:
-            self.most_reward = total_reward
-            self.best_policy = deepcopy(self.policy_model)
+    #         obs, reward, done, info = self.actual_environment.step(action)
+    #         rewards.append(reward)
+    #         if done:
+    #             break
 
-        if wandb.run:
-            wandb.log({
-                "eval/total_rewards": total_reward,
-                "eval/episode_length": step,
-            })
+    #     total_reward = sum(rewards)
+    #     if total_reward > self.most_reward:
+    #         self.most_reward = total_reward
+    #         self.best_policy = deepcopy(self.policy_head)
+
+    #     if wandb.run:
+    #         wandb.log({
+    #             "eval/total_rewards": total_reward,
+    #             "eval/episode_length": step,
+    #         })
