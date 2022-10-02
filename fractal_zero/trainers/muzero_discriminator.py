@@ -2,6 +2,7 @@ import gym
 import torch
 import torch.nn.functional as F
 import numpy as np
+from copy import deepcopy
 
 from typing import Callable, Union
 from fractal_zero.data.expert_dataset import ExpertDataset
@@ -145,6 +146,7 @@ class FractalMuZeroDiscriminatorTrainer:
         policy_model: torch.nn.Module,
         expert_dataset: ExpertDataset,
         optimizer: torch.optim.Optimizer,  # TODO: add check to see if all parameters are inside optimizer (sanity check)
+        loss_spec=None,
     ):
         # TODO: vectorize the actual environment?
         self.actual_environment = load_environment(env)
@@ -156,9 +158,12 @@ class FractalMuZeroDiscriminatorTrainer:
         # TODO: refac somehow...?
         self.action_space = self.actual_environment.action_space
         self.model_environment.action_space = self.action_space
-        self.action_space_loss = get_space_loss(self.action_space)
+        self.action_space_loss = get_space_loss(self.action_space, loss_spec)
 
         self.expert_dataset = expert_dataset
+
+        self.best_policy = None
+        self.most_reward = float("-inf")
 
     @property
     def discriminator(self):
@@ -246,12 +251,13 @@ class FractalMuZeroDiscriminatorTrainer:
         return loss / c
 
     def _get_policy_loss(self, batch):
+        self.policy_model.train()
+
         c = 0
         loss = 0
         for x, t, _ in zip(*batch):
-            action_target = self.policy_model.parse_action(t)
             y = self.policy_model(x.float())
-            loss += self.action_space_loss(y, action_target)
+            loss += self.action_space_loss(y, t)
             c += 1
         return loss / c
 
@@ -275,9 +281,10 @@ class FractalMuZeroDiscriminatorTrainer:
         loss += discriminator_loss
 
         agent_policy_loss = self._get_policy_loss(self.agent_batch)
-        expert_policy_loss = self._get_policy_loss(self.expert_batch)
-        policy_loss = (agent_policy_loss + expert_policy_loss) / 2
-        loss += policy_loss
+        # expert_policy_loss = self._get_policy_loss(self.expert_batch)
+        # policy_loss = (agent_policy_loss + expert_policy_loss) / 2
+        # loss += policy_loss
+        loss += agent_policy_loss
 
         loss.backward()
         self.optimizer.step()
@@ -288,10 +295,33 @@ class FractalMuZeroDiscriminatorTrainer:
                 "discriminator/agent_loss": agent_loss,
                 "discriminator/expert_loss": expert_loss,
                 "policy/agent_loss": agent_policy_loss,
-                "policy/expert_loss": expert_policy_loss,
+                # "policy/expert_loss": expert_policy_loss,
             })
 
         return discriminator_loss.item()
 
-    def evaluate_step(self):
-        raise NotImplementedError
+    @torch.no_grad()
+    def evaluate_step(self, max_steps: int):
+        self.policy_model.eval()
+
+        rewards = []
+
+        obs = self.actual_environment.reset()
+        for step in range(max_steps):
+            action = self.policy_model(torch.tensor(obs).float())
+            action = self.policy_model.parse_action(action)
+            obs, reward, done, info = self.actual_environment.step(action)
+            rewards.append(reward)
+            if done:
+                break
+
+        total_reward = sum(rewards)
+        if total_reward > self.most_reward:
+            self.most_reward = total_reward
+            self.best_policy = deepcopy(self.policy_model)
+
+        if wandb.run:
+            wandb.log({
+                "eval/total_rewards": total_reward,
+                "eval/episode_length": step,
+            })
