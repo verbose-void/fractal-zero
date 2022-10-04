@@ -1,0 +1,134 @@
+from copy import deepcopy
+from typing import Callable, List
+import torch
+
+from tqdm import tqdm
+from fractal_zero.search.tree import GameTree
+
+from fractal_zero.vectorized_environment import VectorizedEnvironment
+
+
+def _l2_distance(vec0, vec1):
+    assert len(vec0.shape) <= 2, "Not defined for dimensionality > 2."
+    return torch.norm(vec0 - vec1, dim=-1)
+
+
+def _relativize_vector(vector: torch.Tensor):
+    std = vector.std()
+    if std == 0:
+        return torch.ones(len(vector))
+    standard = (vector - vector.mean()) / std
+    standard[standard > 0] = torch.log(1 + standard[standard > 0]) + 1
+    standard[standard <= 0] = torch.exp(standard[standard <= 0])
+    return standard
+
+
+_ATTRIBUTES_TO_CLONE = (
+    "states",
+    "observations",
+    "rewards",
+    "dones",
+    "scores",
+    "observations",
+)
+
+
+class FMC:
+    def __init__(
+        self, 
+        vectorized_environment: VectorizedEnvironment,
+        balance: float = 1.0,
+        similarity_function: Callable = _l2_distance,
+        track_tree: bool = True,
+    ):
+        self.vec_env = vectorized_environment
+        self.balance = balance
+        self.similarity_function = similarity_function
+
+        self.tree = GameTree(self.num_walkers, prune=True) if track_tree else None
+
+        self._clear_clone_variables()
+
+    @property
+    def num_walkers(self):
+        return self.vec_env.n
+
+    @torch.no_grad()
+    def simulate(self, steps: int, use_tqdm: bool = False):
+        self.scores = torch.zeros(self.num_walkers, dtype=float)
+
+        it = tqdm(range(steps), disable=not use_tqdm)
+        for _ in it:
+            self._perturbate()
+            self._clone()
+
+    def _perturbate(self):
+        self.actions = self.vec_env.batched_action_space_sample()
+        self.observations, self.states, self.rewards, self.dones, self.infos = self.vec_env.batch_step(self.actions)
+
+        self.scores += self.rewards
+
+    def _set_clone_variables(self):
+        self.clone_partners = torch.randperm(torch.arange(self.num_walkers))
+        self.similarities = self.similarity_function(self.states, self.states[self.clone_partners])
+
+        rel_sim = _relativize_vector(self.similarities)
+        rel_score = _relativize_vector(self.scores)
+        self.virtual_rewards = rel_score ** self.balance * rel_sim
+
+        vr = self.virtual_rewards
+        pair_vr = self.virtual_rewards[self.clone_partners]
+        value = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
+        self.clone_mask = (value >= torch.rand()).astype(bool)
+
+        # TODO: include `self.dones` into decision
+
+    def _clear_clone_variables(self):
+        self.virtual_rewards = None
+        self.similarities = None
+        self.clone_partners = None
+        self.clone_mask = None
+
+    def _clone(self):
+        self._set_clone_variables()
+
+        self.vec_env.clone(self.clone_partners, self.clone_mask)
+        if self.tree:
+            self.tree.clone(self.clone_partners, self.clone_mask)
+
+        for attr in _ATTRIBUTES_TO_CLONE:
+            self._clone_variable(attr)
+
+        # clearing after use makes it less prone to human errors and clarity.
+        self._clear_clone_variables()
+
+    def _clone_vector_inplace(self, vector):
+        vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
+        return vector
+
+    def _clone_list(self, l: List, copy: bool = False):
+        new_list = []
+        for i in range(self.num_walkers):
+            do_clone = self.clone_mask[i]
+            partner = self.clone_partners[i]
+
+            if do_clone:
+                # NOTE: may not need to deepcopy.
+                if copy:
+                    new_list.append(deepcopy(l[partner]))
+                else:
+                    new_list.append(l[partner])
+            else:
+                new_list.append(l[i])
+        return new_list
+
+    def _clone_variable(self, subject):
+        if isinstance(subject, torch.Tensor):
+            return self._clone_vector_inplace(subject)
+        elif isinstance(subject, list):
+            return self._clone_list(subject)
+        elif isinstance(subject, str):
+            cloned_subject = self._clone(getattr(self, subject))
+            setattr(subject, cloned_subject)
+            return cloned_subject
+        raise NotImplementedError()
