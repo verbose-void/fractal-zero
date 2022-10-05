@@ -1,6 +1,5 @@
 import gym
 import numpy as np
-import networkx as nx
 
 # from fractal_zero.search.fmc import FMC
 from fractal_zero.search.fmc import FMC
@@ -63,7 +62,7 @@ def test_cartpole_actual_environment(vec_env_class):
 
 
 def test_cartpole_consistently_high_reward():
-    n = 16
+    n = 64
     vec_env = SerialVectorizedEnvironment("CartPole-v0", n=n)
     fmc = FMC(vec_env, balance=1)
     _assert_mean_total_rewards(fmc, 400, 140, use_tqdm=True)
