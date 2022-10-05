@@ -153,7 +153,7 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
         return (
             states,
             observations,
-            torch.tensor(rewards).unsqueeze(-1).float(),
+            torch.tensor(rewards, dtype=float),
             dones,
             infos,
         )
