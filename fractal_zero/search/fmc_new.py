@@ -1,6 +1,7 @@
 from copy import deepcopy
 from typing import Callable, List
 import torch
+import numpy as np
 
 from tqdm import tqdm
 from fractal_zero.search.tree import GameTree
@@ -75,10 +76,11 @@ class FMC:
         it = tqdm(range(steps), disable=not use_tqdm)
         for _ in it:
             self._perturbate()
-            self._clone()
 
             if self._can_early_exit():
                 break
+
+            self._clone()
 
     def _perturbate(self):
         self.actions = self.vec_env.batched_action_space_sample()
@@ -88,7 +90,8 @@ class FMC:
         self.scores += self.rewards
 
         if self.tree:
-            self.tree.build_next_level(self.actions, self.observations, self.rewards, self.freeze_mask)
+            frozen_paths = torch.logical_or(self.freeze_mask, self.dones)
+            self.tree.build_next_level(self.actions, self.observations, self.rewards, frozen_paths)
         self._set_freeze_mask()
 
     def _set_freeze_mask(self):
@@ -96,10 +99,18 @@ class FMC:
         if self.freeze_best:
             self.freeze_mask[self.scores.argmax()] = 1
 
-    def _set_clone_variables(self):
-        # TODO: only allow walkers at non-terminal states to receive clones!
-        self.clone_partners = torch.randperm(self.num_walkers)
+    def _set_valid_clone_partners(self):
+        valid_clone_partners = np.arange(self.num_walkers)
 
+        # cannot clone to walkers at terminal states
+        valid_clone_partners = valid_clone_partners[(self.dones == False).numpy()]
+
+        # TODO: make it so walkers cannot clone to themselves
+        clone_partners = np.random.choice(valid_clone_partners, size=self.num_walkers)
+        self.clone_partners = torch.tensor(clone_partners, dtype=int)
+
+    def _set_clone_variables(self):
+        self._set_valid_clone_partners()
         self.similarities = self.similarity_function(self.states, self.states[self.clone_partners])
 
         rel_sim = _relativize_vector(self.similarities)
@@ -112,8 +123,7 @@ class FMC:
         self.clone_mask = (value >= torch.rand(1)).bool()
 
         # clone all walkers at terminal states
-        # self.clone_mask[self.dones] = True
-
+        self.clone_mask[self.dones] = True
         # don't clone frozen walkers
         self.clone_mask[self.freeze_mask] = False
 
