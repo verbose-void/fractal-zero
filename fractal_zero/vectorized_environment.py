@@ -34,7 +34,7 @@ class VectorizedEnvironment(ABC):
             actions.append(self._action_space.sample())
         return actions
 
-    def batch_step(self, actions):
+    def batch_step(self, actions, frozen_mask):
         raise NotImplementedError
 
     def batch_reset(self):
@@ -62,10 +62,49 @@ class _RayWrappedEnvironment:
         return self._env
 
     def reset(self, *args, **kwargs):
+        self.last_ret = None
         return self._env.reset(*args, **kwargs)
 
     def step(self, action, *args, **kwargs):
-        return self._env.step(action, *args, **kwargs)
+        self.last_ret = self._env.step(action, *args, **kwargs)
+        return self.last_ret
+
+    def empty_step(self):
+        obs, _, done, info = self.last_ret
+        return obs, 0, done, info
+
+    def get_action_space(self):
+        return self._env.action_space
+
+
+class _WrappedEnvironment:
+    def __init__(self, env: Union[str, gym.Env]):
+        self._env = load_environment(env, copy=True)
+
+    @property
+    def action_space(self):
+        return self._env.action_space
+
+    def set_state(self, env: gym.Env):
+        if not isinstance(env, gym.Env):
+            raise ValueError(f"Expected a gym environment. Got {type(env)}.")
+
+        self._env = deepcopy(env)
+
+    def get_state(self) -> gym.Env:
+        return self._env
+
+    def reset(self, *args, **kwargs):
+        self.last_ret = None
+        return self._env.reset(*args, **kwargs)
+
+    def step(self, action, *args, **kwargs):
+        self.last_ret = self._env.step(action, *args, **kwargs)
+        return self.last_ret
+
+    def empty_step(self):
+        obs, _, done, info = self.last_ret
+        return obs, 0, done, info
 
     def get_action_space(self):
         return self._env.action_space
@@ -89,14 +128,17 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
     def batch_reset(self, *args, **kwargs):
         return ray.get([env.reset.remote(*args, **kwargs) for env in self.envs])
 
-    def batch_step(self, actions, *args, **kwargs):
+    def batch_step(self, actions, frozen_mask, *args, **kwargs):
         assert len(actions) == self.n
 
         returns = []
         for i, env in enumerate(self.envs):
-            action = actions[i]
-            ret = env.step.remote(action, *args, **kwargs)
-            returns.append(ret)
+            if frozen_mask[i]:
+                returns.append(env.empty_step.remote())
+            else:
+                action = actions[i]
+                ret = env.step.remote(action, *args, **kwargs)
+                returns.append(ret)
 
         observations = []
         rewards = []
@@ -114,8 +156,8 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
         return (
             states,
             observations,
-            torch.tensor(rewards).unsqueeze(-1).float(),
-            dones,
+            torch.tensor(rewards, dtype=float),
+            torch.tensor(dones, dtype=bool),
             infos,
         )
 
@@ -161,12 +203,12 @@ class SerialVectorizedEnvironment(VectorizedEnvironment):
             observation_encoder if observation_encoder else torch.tensor
         )
 
-        self.envs = [load_environment(env, copy=True) for _ in range(n)]
+        self.envs = [_WrappedEnvironment(env) for _ in range(n)]
 
     def batch_reset(self, *args, **kwargs):
         return [env.reset(*args, **kwargs) for env in self.envs]
 
-    def batch_step(self, actions, *args, **kwargs):
+    def batch_step(self, actions, frozen_mask, *args, **kwargs):
         assert len(actions) == self.n
 
         observations = []
@@ -174,9 +216,13 @@ class SerialVectorizedEnvironment(VectorizedEnvironment):
         dones = []
         infos = []
         for i, env in enumerate(self.envs):
-            action = actions[i]
-            obs, rew, done, info = env.step(action, *args, **kwargs)
+            if frozen_mask[i]:
+                ret = env.empty_step()
+            else:
+                action = actions[i]
+                ret = env.step(action, *args, **kwargs)
 
+            obs, rew, done, info = ret
             observations.append(obs)
             rewards.append(rew)
             dones.append(done)
@@ -187,8 +233,8 @@ class SerialVectorizedEnvironment(VectorizedEnvironment):
         return (
             states,
             observations,
-            torch.tensor(rewards).unsqueeze(-1).float(),
-            dones,
+            torch.tensor(rewards, dtype=float),
+            torch.tensor(dones, dtype=bool),
             infos,
         )
 
@@ -239,8 +285,11 @@ class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
         self.set_all_states(self._env, obs)
         return obs
 
-    def batch_step(self, actions, *args, **kwargs):
+    def batch_step(self, actions, frozen_mask=None, *args, **kwargs):
         device = self.joint_model.device
+
+        if frozen_mask is not None:
+            raise NotImplementedError
 
         if not isinstance(actions, torch.Tensor):
             actions = torch.tensor(actions, device=device).float().unsqueeze(-1)
