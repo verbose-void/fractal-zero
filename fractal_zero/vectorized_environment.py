@@ -20,8 +20,7 @@ def load_environment(env: Union[str, gym.Env], copy: bool = False) -> gym.Env:
 
 class VectorizedEnvironment(ABC):
     n: int
-    action_space: gym.Space
-    n: int
+    _action_space: gym.Space
 
     def __init__(self, env: Union[str, gym.Env], n: int):
         env = load_environment(env)
