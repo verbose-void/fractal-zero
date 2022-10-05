@@ -53,7 +53,9 @@ class FMC:
 
     def reset(self):
         self.vec_env.batch_reset()
-        self.states, self.observations, self.rewards, self.dones, self.infos = None, None, None, None, None
+
+        self.dones = torch.zeros(self.num_walkers)
+        self.states, self.observations, self.rewards, self.infos = None, None, None, None
 
         self.scores = torch.zeros(self.num_walkers, dtype=float)
         self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
@@ -65,6 +67,9 @@ class FMC:
     def num_walkers(self):
         return self.vec_env.n
 
+    def _can_early_exit(self):
+        return torch.all(self.dones)
+
     @torch.no_grad()
     def simulate(self, steps: int, use_tqdm: bool = False):
         it = tqdm(range(steps), disable=not use_tqdm)
@@ -72,9 +77,14 @@ class FMC:
             self._perturbate()
             self._clone()
 
+            if self._can_early_exit():
+                break
+
     def _perturbate(self):
         self.actions = self.vec_env.batched_action_space_sample()
-        self.states, self.observations, self.rewards, self.dones, self.infos = self.vec_env.batch_step(self.actions, self.freeze_mask)
+
+        freeze_steps = torch.logical_or(self.freeze_mask, self.dones)
+        self.states, self.observations, self.rewards, self.dones, self.infos = self.vec_env.batch_step(self.actions, freeze_steps)
         self.scores += self.rewards
 
         if self.tree:
@@ -87,7 +97,9 @@ class FMC:
             self.freeze_mask[self.scores.argmax()] = 1
 
     def _set_clone_variables(self):
+        # TODO: only allow walkers at non-terminal states to receive clones!
         self.clone_partners = torch.randperm(self.num_walkers)
+
         self.similarities = self.similarity_function(self.states, self.states[self.clone_partners])
 
         rel_sim = _relativize_vector(self.similarities)
@@ -99,10 +111,11 @@ class FMC:
         value = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
         self.clone_mask = (value >= torch.rand(1)).bool()
 
+        # clone all walkers at terminal states
+        # self.clone_mask[self.dones] = True
+
         # don't clone frozen walkers
         self.clone_mask[self.freeze_mask] = False
-
-        # TODO: include `self.dones` into decision
 
     def _clone(self):
         self._set_clone_variables()

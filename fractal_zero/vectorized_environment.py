@@ -158,7 +158,7 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
             states,
             observations,
             torch.tensor(rewards, dtype=float),
-            dones,
+            torch.tensor(dones, dtype=bool),
             infos,
         )
 
@@ -235,7 +235,7 @@ class SerialVectorizedEnvironment(VectorizedEnvironment):
             states,
             observations,
             torch.tensor(rewards, dtype=float),
-            dones,
+            torch.tensor(dones, dtype=bool),
             infos,
         )
 
