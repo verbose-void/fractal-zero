@@ -14,37 +14,18 @@ from fractal_zero.utils import (
     parameters_norm,
 )
 
-from fractal_zero.vectorized_environment import (
-    RayVectorizedEnvironment,
-    SerialVectorizedEnvironment,
-    load_environment,
-)
-
 
 class OfflineFMCPolicyTrainer:
-
     def __init__(
         self,
-        env: Union[str, gym.Env],
+        fmc: FMC,
+        eval_env: gym.Env,
         policy_model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        num_walkers: int,
-        observation_encoder: Callable = None,
         loss_spec=None,
-        fmc_config: FMCConfig = None,
-        use_ray: bool = False,
     ):
-        self.env = load_environment(env)
-
-        # TODO: config option
-        if use_ray:
-            self.vec_env = RayVectorizedEnvironment(
-                env, num_walkers, observation_encoder=observation_encoder
-            )
-        else:
-            self.vec_env = SerialVectorizedEnvironment(
-                env, num_walkers, observation_encoder=observation_encoder
-            )
+        self.fmc = fmc
+        self.env = eval_env
 
         self.policy_model = policy_model
         self.optimizer = optimizer
@@ -53,23 +34,19 @@ class OfflineFMCPolicyTrainer:
         self.most_reward = float("-inf")
         self.best_model = None
 
-        self.fmc_config = fmc_config
-
     def generate_episode_data(self, max_steps: int):
-        self.vec_env.batch_reset()
+        self.fmc.reset()
 
-        self.fmc = FMC(self.vec_env, config=self.fmc_config)
+        if not self.fmc.tree:
+            raise ValueError("FMC is not tracking walker paths.")
+
+        self.fmc.simulate(max_steps)
         self.sampler = TreeSampler(
             self.fmc.tree,
             sample_type="all_nodes",
             weight_type="walker_children_ratio",
             use_wandb=True,
         )
-
-        if not self.fmc.tree:
-            raise ValueError("FMC is not tracking walker paths.")
-
-        self.fmc.simulate(max_steps)
 
     def _general_loss(self, action, action_targets, action_weights):
         # TODO: vectorize better (if possible?)
