@@ -78,10 +78,9 @@ class _RayWrappedEnvironment:
 
 
 class _WrappedEnvironment:
-
     def __init__(self, env: Union[str, gym.Env]):
         self._env = load_environment(env, copy=True)
-    
+
     @property
     def action_space(self):
         return self._env.action_space

@@ -3,7 +3,7 @@ import numpy as np
 import networkx as nx
 
 # from fractal_zero.search.fmc import FMC
-from fractal_zero.search.fmc_new import FMC
+from fractal_zero.search.fmc import FMC
 from fractal_zero.vectorized_environment import (
     RayVectorizedEnvironment,
     SerialVectorizedEnvironment,
@@ -18,7 +18,9 @@ with_vec_envs = pytest.mark.parametrize(
 )
 
 
-def _assert_mean_total_rewards(fmc, steps, expected_mean_reward, use_tqdm=False, trials=8):
+def _assert_mean_total_rewards(
+    fmc, steps, expected_mean_reward, use_tqdm=False, trials=8
+):
     total_rewards = []
 
     for _ in range(trials):

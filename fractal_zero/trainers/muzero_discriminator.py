@@ -213,17 +213,21 @@ class FractalMuZeroDiscriminatorTrainer:
 
     def generate_batches(self, max_steps: int):
         self.model_environment.eval()
-        batch_size_per_class = 4   # TODO: config
+        batch_size_per_class = 4  # TODO: config
         self.agent_batch = self._get_agent_batch(batch_size_per_class, max_steps)
-        self.expert_batch = self.expert_dataset.sample_batch(batch_size_per_class, max_steps)
+        self.expert_batch = self.expert_dataset.sample_batch(
+            batch_size_per_class, max_steps
+        )
 
         if wandb.run:
             amean_steps = np.mean([len(o) for o in self.agent_batch[0]])
             emean_steps = np.mean([len(o) for o in self.expert_batch[0]])
-            wandb.log({
-                "batches/agent_mean_steps": amean_steps,
-                "batches/expert_mean_steps": emean_steps,
-            })
+            wandb.log(
+                {
+                    "batches/agent_mean_steps": amean_steps,
+                    "batches/expert_mean_steps": emean_steps,
+                }
+            )
 
     def _get_discriminator_loss(self, batch):
         c = 0
@@ -233,7 +237,9 @@ class FractalMuZeroDiscriminatorTrainer:
             (
                 confusions,
                 consistency,
-            ) = self.model_environment.discriminate_single_trajectory(x.float(), y.float())
+            ) = self.model_environment.discriminate_single_trajectory(
+                x.float(), y.float()
+            )
             loss += F.mse_loss(confusions, labels)
             c += 1
         return loss / c
@@ -258,10 +264,12 @@ class FractalMuZeroDiscriminatorTrainer:
         self.optimizer.step()
 
         if wandb.run:
-            wandb.log({
-                "discriminator/train_loss": discriminator_loss,
-                "discriminator/agent_loss": agent_loss,
-                "discriminator/expert_loss": expert_loss,
-            })
+            wandb.log(
+                {
+                    "discriminator/train_loss": discriminator_loss,
+                    "discriminator/agent_loss": agent_loss,
+                    "discriminator/expert_loss": expert_loss,
+                }
+            )
 
         return discriminator_loss.item()

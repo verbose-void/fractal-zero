@@ -111,9 +111,19 @@ class GameTree:
         self.walker_paths = [Path(self.root, self.g) for _ in range(self.num_walkers)]
 
     def build_next_level(
-        self, actions: Sequence, new_observations: Sequence, rewards: Sequence, freeze_mask,
+        self,
+        actions: Sequence,
+        new_observations: Sequence,
+        rewards: Sequence,
+        freeze_mask,
     ):
-        assert len(actions) == len(new_observations) == len(rewards) == len(freeze_mask) == self.num_walkers
+        assert (
+            len(actions)
+            == len(new_observations)
+            == len(rewards)
+            == len(freeze_mask)
+            == self.num_walkers
+        )
 
         # TODO: how can we detect duplicate observations / action transitions to save memory? (might not be super important)
         it = zip(self.walker_paths, actions, new_observations, rewards, freeze_mask)
@@ -141,7 +151,9 @@ class GameTree:
 
     @property
     def best_path(self):
-        return max(self.walker_paths, key=lambda p: p.total_reward)  # best path of current walker
+        return max(
+            self.walker_paths, key=lambda p: p.total_reward
+        )  # best path of current walker
 
     def render(self):
         colors = []
