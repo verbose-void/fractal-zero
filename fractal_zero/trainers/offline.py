@@ -21,10 +21,7 @@ from fractal_zero.vectorized_environment import (
 )
 
 
-class OnlineFMCPolicyTrainer:
-    """Trains a policy model in an online manner using FMC as the data generator. "Online" means that the latest policy
-    weights are used during the search process. So the data is generated, the model is trained, and the cycle continues.
-    """
+class OfflineFMCPolicyTrainer:
 
     def __init__(
         self,
