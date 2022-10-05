@@ -2,6 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from typing import List, Sequence
 from uuid import UUID, uuid4
+import numpy as np
 
 
 class StateNode:
@@ -115,8 +116,11 @@ class GameTree:
         actions: Sequence,
         new_observations: Sequence,
         rewards: Sequence,
-        freeze_mask,
+        freeze_mask=None,
     ):
+        if freeze_mask is None:
+            freeze_mask = np.zeros(self.num_walkers, dtype=bool)
+
         assert (
             len(actions)
             == len(new_observations)
