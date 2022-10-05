@@ -39,13 +39,27 @@ class FMC:
         vectorized_environment: VectorizedEnvironment,
         balance: float = 1.0,
         similarity_function: Callable = _l2_distance,
+        freeze_best: bool = True,
         track_tree: bool = True,
     ):
         self.vec_env = vectorized_environment
         self.balance = balance
         self.similarity_function = similarity_function
 
-        self.tree = GameTree(self.num_walkers, prune=True) if track_tree else None
+        self.freeze_best = freeze_best
+        self.track_tree = track_tree
+
+        self.reset()
+
+    def reset(self):
+        self.vec_env.batch_reset()
+        self.states, self.observations, self.rewards, self.dones, self.infos = None, None, None, None, None
+
+        self.scores = torch.zeros(self.num_walkers, dtype=float)
+        self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
+        self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
+
+        self.tree = GameTree(self.num_walkers, prune=True) if self.track_tree else None
 
     @property
     def num_walkers(self):
@@ -53,10 +67,6 @@ class FMC:
 
     @torch.no_grad()
     def simulate(self, steps: int, use_tqdm: bool = False):
-        self.scores = torch.zeros(self.num_walkers, dtype=float)
-        self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
-        self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
-
         it = tqdm(range(steps), disable=not use_tqdm)
         for _ in it:
             self._perturbate()
@@ -72,10 +82,9 @@ class FMC:
         self._set_freeze_mask()
 
     def _set_freeze_mask(self):
-        # freeze best walker
         self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
-        self.freeze_mask[self.scores.argmax()] = 1
-        self.clone_mask[self.freeze_mask] = False
+        if self.freeze_best:
+            self.freeze_mask[self.scores.argmax()] = 1
 
     def _set_clone_variables(self):
         self.clone_partners = torch.randperm(self.num_walkers)
@@ -89,6 +98,9 @@ class FMC:
         pair_vr = self.virtual_rewards[self.clone_partners]
         value = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
         self.clone_mask = (value >= torch.rand(1)).bool()
+
+        # don't clone frozen walkers
+        self.clone_mask[self.freeze_mask] = False
 
         # TODO: include `self.dones` into decision
 

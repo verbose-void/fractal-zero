@@ -38,16 +38,13 @@ class Path:
         if self.root != new_path.root:
             raise ValueError("Cannot clone to a path unless they share the same root.")
 
-
         # backpropagate
         for state in reversed(self.ordered_states):
-            # TODO: is this the best way to count visits? should we backprop all the way to root?
+            state.num_child_walkers -= 1
 
             if state in new_path.ordered_states:
                 # will break at root or the closest common state
                 break
-
-            state.num_child_walkers -= 1
 
             if prune and state.num_child_walkers <= 0:
                 # TODO: force prune when the number of visits is reasonably low?
@@ -96,11 +93,11 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation=None, prune: bool = True, track_best_path: bool = True):
+    def __init__(self, num_walkers: int, root_observation=None, prune: bool = True):
         self.num_walkers = num_walkers
         self.prune = prune
 
-        num_children = self.num_walkers + 1 if track_best_path else self.num_walkers
+        num_children = self.num_walkers
         self.root = StateNode(
             root_observation,
             reward=0,
@@ -112,21 +109,6 @@ class GameTree:
         self.g.add_node(self.root)
 
         self.walker_paths = [Path(self.root, self.g) for _ in range(self.num_walkers)]
-
-        # track best walker separately
-        self.track_best_path = track_best_path
-        if track_best_path:
-            self._best_path_score = float("-inf")
-            self._best_path = Path(self.root, self.g)
-
-    def _check_if_best_path(self, path: Path):
-        if not self.track_best_path:
-            return
-
-        path_reward = path.total_reward  # TODO: memoize?
-        if path_reward > self._best_path_score:
-            self._best_path_score = path_reward
-            self._best_path.clone_to(path)
 
     def build_next_level(
         self, actions: Sequence, new_observations: Sequence, rewards: Sequence, freeze_mask,
@@ -147,8 +129,6 @@ class GameTree:
 
             self.g.add_edge(last_node, new_node, action=action)
 
-            self._check_if_best_path(path)
-
     def clone(self, partners: Sequence, clone_mask: Sequence):
         for i, path in enumerate(self.walker_paths):
 
@@ -161,8 +141,6 @@ class GameTree:
 
     @property
     def best_path(self):
-        if self.track_best_path:
-            return self._best_path
         return max(self.walker_paths, key=lambda p: p.total_reward)  # best path of current walker
 
     def render(self):

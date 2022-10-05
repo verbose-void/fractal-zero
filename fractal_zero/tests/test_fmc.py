@@ -2,7 +2,6 @@ import gym
 import numpy as np
 import networkx as nx
 
-from fractal_zero.config import FMCConfig
 # from fractal_zero.search.fmc import FMC
 from fractal_zero.search.fmc_new import FMC
 from fractal_zero.vectorized_environment import (
@@ -14,27 +13,33 @@ from fractal_zero.vectorized_environment import (
 import pytest
 
 
-NUM_WALKERS = 16
-
-
 with_vec_envs = pytest.mark.parametrize(
     "vec_env_class", [SerialVectorizedEnvironment, RayVectorizedEnvironment]
 )
+
+
+def _assert_mean_total_rewards(fmc, steps, expected_mean_reward, use_tqdm=False, trials=8):
+    total_rewards = []
+
+    for _ in range(trials):
+        fmc.reset()
+
+        # 200 is the max reward accumulate-able in cartpole.
+        fmc.simulate(steps, use_tqdm=use_tqdm)
+
+        total_reward = fmc.tree.best_path.total_reward
+        total_rewards.append(total_reward)
+    assert np.mean(total_rewards) > expected_mean_reward
 
 
 @with_vec_envs
 def test_cartpole_actual_environment(vec_env_class):
     env = gym.make("CartPole-v0")
 
-    vec_env = vec_env_class(env, n=NUM_WALKERS)
-
-    trials = 10
-    for _ in range(trials):
-        vec_env.batch_reset()
-        fmc = FMC(vec_env)
-        fmc.simulate(16)
-        assert nx.is_tree(fmc.tree.g)
-        assert fmc.tree.best_path.total_reward >= 16
+    n = 16
+    vec_env = vec_env_class(env, n=n)
+    fmc = FMC(vec_env)
+    _assert_mean_total_rewards(fmc, 64, 50)
 
 
 # def test_cartpole_dynamics_function():
@@ -56,27 +61,7 @@ def test_cartpole_actual_environment(vec_env_class):
 
 
 def test_cartpole_consistently_high_reward():
-    n = 64
-
-    env = gym.make("CartPole-v0")
-    vec_env = SerialVectorizedEnvironment(env, n=n)
-
-    config = FMCConfig(num_walkers=n, clone_strategy="cumulative_reward")
-    fmc = FMC(vec_env, config=config)
-
-    total_rewards = []
-
-    num_trials = 8
-    for _ in range(num_trials):
-        vec_env.batch_reset()
-        fmc.reset()
-
-        # 200 is the max reward accumulate-able in cartpole.
-        fmc.simulate(200, use_tqdm=True)
-
-        total_reward = fmc.tree.best_path.total_reward
-        total_rewards.append(total_reward)
-
-    # somewhat lenient constraints
-    # NOTE: random max rewards average is usually <<50.
-    assert np.mean(total_rewards) > 120
+    n = 16
+    vec_env = SerialVectorizedEnvironment("CartPole-v0", n=n)
+    fmc = FMC(vec_env, balance=1)
+    _assert_mean_total_rewards(fmc, 400, 175, use_tqdm=True)

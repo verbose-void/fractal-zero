@@ -62,6 +62,7 @@ class _RayWrappedEnvironment:
         return self._env
 
     def reset(self, *args, **kwargs):
+        self.last_ret = None
         return self._env.reset(*args, **kwargs)
 
     def step(self, action, *args, **kwargs):
@@ -69,7 +70,8 @@ class _RayWrappedEnvironment:
         return self.last_ret
 
     def empty_step(self):
-        return self.last_ret
+        obs, _, done, info = self.last_ret
+        return obs, 0, done, info
 
     def get_action_space(self):
         return self._env.action_space
@@ -94,6 +96,7 @@ class _WrappedEnvironment:
         return self._env
 
     def reset(self, *args, **kwargs):
+        self.last_ret = None
         return self._env.reset(*args, **kwargs)
 
     def step(self, action, *args, **kwargs):
@@ -101,7 +104,8 @@ class _WrappedEnvironment:
         return self.last_ret
 
     def empty_step(self):
-        return self.last_ret
+        obs, _, done, info = self.last_ret
+        return obs, 0, done, info
 
     def get_action_space(self):
         return self._env.action_space
