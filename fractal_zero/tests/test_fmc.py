@@ -3,7 +3,8 @@ import numpy as np
 import networkx as nx
 
 from fractal_zero.config import FMCConfig
-from fractal_zero.search.fmc import FMC
+# from fractal_zero.search.fmc import FMC
+from fractal_zero.search.fmc_new import FMC
 from fractal_zero.vectorized_environment import (
     RayVectorizedEnvironment,
     SerialVectorizedEnvironment,
@@ -25,16 +26,12 @@ with_vec_envs = pytest.mark.parametrize(
 def test_cartpole_actual_environment(vec_env_class):
     env = gym.make("CartPole-v0")
 
-    config = FMCConfig(
-        num_walkers=NUM_WALKERS,
-    )
-
     vec_env = vec_env_class(env, n=NUM_WALKERS)
 
     trials = 10
     for _ in range(trials):
         vec_env.batch_reset()
-        fmc = FMC(vec_env, config=config, verbose=False)
+        fmc = FMC(vec_env)
         fmc.simulate(16)
         assert nx.is_tree(fmc.tree.g)
         assert fmc.tree.best_path.total_reward >= 16

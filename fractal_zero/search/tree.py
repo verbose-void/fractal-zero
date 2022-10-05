@@ -38,32 +38,27 @@ class Path:
         if self.root != new_path.root:
             raise ValueError("Cannot clone to a path unless they share the same root.")
 
-        # build iterator
-        reversed_indices = reversed(range(len(self.ordered_states)))
-        reversed_states = reversed(self.ordered_states)
-        reversed_new_states = reversed(new_path.ordered_states)
-        it = zip(reversed_indices, reversed_states, reversed_new_states)
 
         # backpropagate
-        for i, state, new_state in it:
-
+        for state in reversed(self.ordered_states):
             # TODO: is this the best way to count visits? should we backprop all the way to root?
-            new_state.visits += 1
 
-            if state == new_state:
+            if state in new_path.ordered_states:
                 # will break at root or the closest common state
                 break
 
             state.num_child_walkers -= 1
-            new_state.num_child_walkers += 1
 
             if prune and state.num_child_walkers <= 0:
                 # TODO: force prune when the number of visits is reasonably low?
-
                 self.g.remove_node(state)
 
-            # don't copy, just update reference
-            self.ordered_states[i] = new_state
+        # don't copy, just update reference
+        self.ordered_states.clear()
+        for new_state in new_path.ordered_states:
+            new_state.num_child_walkers += 1
+            new_state.visits += 1
+            self.ordered_states.append(new_state)
 
     @property
     def total_reward(self) -> float:
@@ -101,14 +96,15 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation=None, prune: bool = True):
+    def __init__(self, num_walkers: int, root_observation=None, prune: bool = True, track_best_path: bool = True):
         self.num_walkers = num_walkers
         self.prune = prune
 
+        num_children = self.num_walkers + 1 if track_best_path else self.num_walkers
         self.root = StateNode(
             root_observation,
             reward=0,
-            num_child_walkers=self.num_walkers,
+            num_child_walkers=num_children,
             terminal=False,
         )
 
@@ -117,14 +113,32 @@ class GameTree:
 
         self.walker_paths = [Path(self.root, self.g) for _ in range(self.num_walkers)]
 
+        # track best walker separately
+        self.track_best_path = track_best_path
+        if track_best_path:
+            self._best_path_score = float("-inf")
+            self._best_path = Path(self.root, self.g)
+
+    def _check_if_best_path(self, path: Path):
+        if not self.track_best_path:
+            return
+
+        path_reward = path.total_reward  # TODO: memoize?
+        if path_reward > self._best_path_score:
+            self._best_path_score = path_reward
+            self._best_path.clone_to(path)
+
     def build_next_level(
-        self, actions: Sequence, new_observations: Sequence, rewards: Sequence
+        self, actions: Sequence, new_observations: Sequence, rewards: Sequence, freeze_mask,
     ):
-        assert len(actions) == len(new_observations) == len(rewards) == self.num_walkers
+        assert len(actions) == len(new_observations) == len(rewards) == len(freeze_mask) == self.num_walkers
 
         # TODO: how can we detect duplicate observations / action transitions to save memory? (might not be super important)
-        it = zip(self.walker_paths, actions, new_observations, rewards)
-        for path, action, new_observation, reward in it:
+        it = zip(self.walker_paths, actions, new_observations, rewards, freeze_mask)
+        for path, action, new_observation, reward, frozen in it:
+            if frozen:
+                continue
+
             last_node = path.last_node
 
             # TODO: denote terminal states
@@ -133,8 +147,11 @@ class GameTree:
 
             self.g.add_edge(last_node, new_node, action=action)
 
+            self._check_if_best_path(path)
+
     def clone(self, partners: Sequence, clone_mask: Sequence):
         for i, path in enumerate(self.walker_paths):
+
             if not clone_mask[i]:
                 # do not clone
                 continue
@@ -144,7 +161,9 @@ class GameTree:
 
     @property
     def best_path(self):
-        return max(self.walker_paths, key=lambda p: p.total_reward)
+        if self.track_best_path:
+            return self._best_path
+        return max(self.walker_paths, key=lambda p: p.total_reward)  # best path of current walker
 
     def render(self):
         colors = []

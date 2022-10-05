@@ -47,8 +47,6 @@ class FMC:
 
         self.tree = GameTree(self.num_walkers, prune=True) if track_tree else None
 
-        self._clear_clone_variables()
-
     @property
     def num_walkers(self):
         return self.vec_env.n
@@ -56,6 +54,8 @@ class FMC:
     @torch.no_grad()
     def simulate(self, steps: int, use_tqdm: bool = False):
         self.scores = torch.zeros(self.num_walkers, dtype=float)
+        self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
+        self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
 
         it = tqdm(range(steps), disable=not use_tqdm)
         for _ in it:
@@ -64,12 +64,21 @@ class FMC:
 
     def _perturbate(self):
         self.actions = self.vec_env.batched_action_space_sample()
-        self.observations, self.states, self.rewards, self.dones, self.infos = self.vec_env.batch_step(self.actions)
-
+        self.states, self.observations, self.rewards, self.dones, self.infos = self.vec_env.batch_step(self.actions, self.freeze_mask)
         self.scores += self.rewards
 
+        if self.tree:
+            self.tree.build_next_level(self.actions, self.observations, self.rewards, self.freeze_mask)
+        self._set_freeze_mask()
+
+    def _set_freeze_mask(self):
+        # freeze best walker
+        self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
+        self.freeze_mask[self.scores.argmax()] = 1
+        self.clone_mask[self.freeze_mask] = False
+
     def _set_clone_variables(self):
-        self.clone_partners = torch.randperm(torch.arange(self.num_walkers))
+        self.clone_partners = torch.randperm(self.num_walkers)
         self.similarities = self.similarity_function(self.states, self.states[self.clone_partners])
 
         rel_sim = _relativize_vector(self.similarities)
@@ -79,15 +88,9 @@ class FMC:
         vr = self.virtual_rewards
         pair_vr = self.virtual_rewards[self.clone_partners]
         value = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
-        self.clone_mask = (value >= torch.rand()).astype(bool)
+        self.clone_mask = (value >= torch.rand(1)).bool()
 
         # TODO: include `self.dones` into decision
-
-    def _clear_clone_variables(self):
-        self.virtual_rewards = None
-        self.similarities = None
-        self.clone_partners = None
-        self.clone_mask = None
 
     def _clone(self):
         self._set_clone_variables()
@@ -98,9 +101,6 @@ class FMC:
 
         for attr in _ATTRIBUTES_TO_CLONE:
             self._clone_variable(attr)
-
-        # clearing after use makes it less prone to human errors and clarity.
-        self._clear_clone_variables()
 
     def _clone_vector_inplace(self, vector):
         vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
@@ -128,7 +128,7 @@ class FMC:
         elif isinstance(subject, list):
             return self._clone_list(subject)
         elif isinstance(subject, str):
-            cloned_subject = self._clone(getattr(self, subject))
-            setattr(subject, cloned_subject)
+            cloned_subject = self._clone_variable(getattr(self, subject))
+            setattr(self, subject, cloned_subject)
             return cloned_subject
         raise NotImplementedError()
