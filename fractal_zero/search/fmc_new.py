@@ -10,7 +10,10 @@ from fractal_zero.vectorized_environment import VectorizedEnvironment
 
 
 def _l2_distance(vec0, vec1):
-    assert len(vec0.shape) <= 2, "Not defined for dimensionality > 2."
+    if vec0.dim() > 2:
+        vec0 = vec0.flatten(start_dim=1)
+    if vec1.dim() > 2:
+        vec1 = vec1.flatten(start_dim=1)
     return torch.norm(vec0 - vec1, dim=-1)
 
 
@@ -107,7 +110,7 @@ class FMC:
 
         # TODO: make it so walkers cannot clone to themselves
         clone_partners = np.random.choice(valid_clone_partners, size=self.num_walkers)
-        self.clone_partners = torch.tensor(clone_partners, dtype=int)
+        self.clone_partners = torch.tensor(clone_partners, dtype=int).long()
 
     def _set_clone_variables(self):
         self._set_valid_clone_partners()
