@@ -39,12 +39,15 @@ class Path:
         if self.root != new_path.root:
             raise ValueError("Cannot clone to a path unless they share the same root.")
 
+        common_state = None
+
         # backpropagate
         for state in reversed(self.ordered_states):
             state.num_child_walkers -= 1
 
+            # will break at root or the closest common state
             if state in new_path.ordered_states:
-                # will break at root or the closest common state
+                common_state = state
                 break
 
             if prune and state.num_child_walkers <= 0:
@@ -52,9 +55,15 @@ class Path:
                 self.g.remove_node(state)
 
         # don't copy, just update reference
+        saw_common = False
         self.ordered_states.clear()
         for new_state in new_path.ordered_states:
-            new_state.num_child_walkers += 1
+            # only increment the number of walkers after the common state from the clone
+            if new_state is common_state:
+                saw_common = True
+            if saw_common:
+                new_state.num_child_walkers += 1
+                
             new_state.visits += 1
             self.ordered_states.append(new_state)
 
@@ -94,7 +103,7 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation=None, prune: bool = True):
+    def __init__(self, num_walkers: int, root_observation=None, prune: bool = False):
         self.num_walkers = num_walkers
         self.prune = prune
 
