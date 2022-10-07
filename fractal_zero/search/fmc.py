@@ -56,7 +56,9 @@ class FMC:
         self.reset()
 
     def reset(self):
-        self.vec_env.batch_reset()
+        # TODO: may need to make this decision of root observations more effectively for stochastic environments.
+        self.observations = self.vec_env.batch_reset()
+        root_obs = self.observations[0]
 
         self.dones = torch.zeros(self.num_walkers)
         self.states, self.observations, self.rewards, self.infos = (
@@ -70,7 +72,7 @@ class FMC:
         self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
         self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
 
-        self.tree = GameTree(self.num_walkers, prune=True) if self.track_tree else None
+        self.tree = GameTree(self.num_walkers, prune=True, root_observation=root_obs) if self.track_tree else None
 
     @property
     def num_walkers(self):
