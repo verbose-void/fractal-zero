@@ -103,7 +103,7 @@ class Path:
 
 
 class GameTree:
-    def __init__(self, num_walkers: int, root_observation=None, prune: bool = False):
+    def __init__(self, num_walkers: int, root_observation=None, prune: bool = True):
         self.num_walkers = num_walkers
         self.prune = prune
 
@@ -141,8 +141,10 @@ class GameTree:
         # TODO: how can we detect duplicate observations / action transitions to save memory? (might not be super important)
         it = zip(self.walker_paths, actions, new_observations, rewards, freeze_mask)
         for path, action, new_observation, reward, frozen in it:
-            if frozen:
-                continue
+            # TODO for some reason adding this here makes the re-enactment of actions
+            # stored in the paths become incorrect. i'm not sure why.
+            # if frozen:  
+                # continue
 
             last_node = path.last_node
 
