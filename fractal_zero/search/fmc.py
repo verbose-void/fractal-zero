@@ -60,7 +60,7 @@ class FMC:
         self.observations = self.vec_env.batch_reset()
         root_obs = self.observations[0]
 
-        self.dones = torch.zeros(self.num_walkers)
+        self.dones = torch.zeros(self.num_walkers).bool()
         self.states, self.observations, self.rewards, self.infos = (
             None,
             None,
@@ -106,9 +106,8 @@ class FMC:
         self.scores += self.rewards
 
         if self.tree:
-            frozen_paths = torch.logical_or(self.freeze_mask, self.dones)
             self.tree.build_next_level(
-                self.actions, self.observations, self.rewards, frozen_paths
+                self.actions, self.observations, self.rewards, freeze_steps,
             )
         self._set_freeze_mask()
 
