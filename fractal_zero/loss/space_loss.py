@@ -46,7 +46,8 @@ class DiscreteSpaceLoss(SpaceLoss):
         elif self.loss_func == F.cross_entropy:
             return _long_cast(y)
 
-        raise NotImplementedError(f"Cast is not implemented for {self.loss_func}")
+        # raise NotImplementedError(f"Cast is not implemented for {self.loss_func}")
+        return y
 
     def __call__(self, x, y):
         x = self._cast_x(x)

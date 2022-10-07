@@ -29,8 +29,11 @@ class Path:
 
     def __init__(self, root: StateNode, g: nx.Graph):
         self.root = root
-        self.ordered_states = [root]
         self.g = g
+        self.clear_ordered_states()
+
+    def clear_ordered_states(self):
+        self.ordered_states = [self.root]
 
     def add_node(self, node: StateNode):
         self.ordered_states.append(node)
@@ -56,7 +59,7 @@ class Path:
 
         # don't copy, just update reference
         saw_common = False
-        self.ordered_states.clear()
+        self.clear_ordered_states()
         for new_state in new_path.ordered_states:
             # only increment the number of walkers after the common state from the clone
             if new_state is common_state:
