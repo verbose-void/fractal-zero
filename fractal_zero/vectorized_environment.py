@@ -10,6 +10,10 @@ from fractal_zero.models.joint_model import JointModel
 from fractal_zero.utils import get_space_shape
 
 
+def dummy_frozen_mask(n: int):
+    return torch.zeros(n).bool()
+
+
 def load_environment(env: Union[str, gym.Env], copy: bool = False) -> gym.Env:
     if isinstance(env, str):
         return gym.make(env)
@@ -34,7 +38,7 @@ class VectorizedEnvironment(ABC):
             actions.append(self._action_space.sample())
         return actions
 
-    def batch_step(self, actions, frozen_mask):
+    def batch_step(self, actions, frozen_mask=None):
         raise NotImplementedError
 
     def batch_reset(self):
@@ -128,8 +132,11 @@ class RayVectorizedEnvironment(VectorizedEnvironment):
     def batch_reset(self, *args, **kwargs):
         return ray.get([env.reset.remote(*args, **kwargs) for env in self.envs])
 
-    def batch_step(self, actions, frozen_mask, *args, **kwargs):
+    def batch_step(self, actions, frozen_mask=None, *args, **kwargs):
         assert len(actions) == self.n
+
+        if frozen_mask is None:
+            frozen_mask = dummy_frozen_mask(self.n)
 
         returns = []
         for i, env in enumerate(self.envs):
@@ -208,8 +215,11 @@ class SerialVectorizedEnvironment(VectorizedEnvironment):
     def batch_reset(self, *args, **kwargs):
         return [env.reset(*args, **kwargs) for env in self.envs]
 
-    def batch_step(self, actions, frozen_mask, *args, **kwargs):
+    def batch_step(self, actions, frozen_mask=None, *args, **kwargs):
         assert len(actions) == self.n
+
+        if frozen_mask is None:
+            frozen_mask = dummy_frozen_mask(self.n)
 
         observations = []
         rewards = []
@@ -318,3 +328,68 @@ class VectorizedDynamicsModelEnvironment(VectorizedEnvironment):
     def clone(self, partners, clone_mask):
         state = self.dynamics_model.state
         state[clone_mask] = state[partners[clone_mask]]
+
+
+# @ray.remote
+# class RayEnvironmentCell(SerialVectorizedEnvironment):
+#     def __init__(self, env: Union[str, gym.Env], n: int, rank: int):
+#         super().__init__(env, n)
+#         self.rank = rank
+
+
+# class RayCellularizedEnvironment(VectorizedEnvironment):
+#     cells: List[SerialVectorizedEnvironment]
+
+#     def __init__(self, env: Union[str, gym.Env], num_environments_per_process: int, num_processes: int):
+#         assert num_environments_per_process > 0
+#         assert num_processes > 1
+
+#         self.cells = []
+#         for rank in range(num_processes):
+#             cell = RayEnvironmentCell.remote(env, num_environments_per_process, rank)
+#             self.cells.append(cell)
+
+#         self.num_envs_per_proc = num_environments_per_process
+#         self.num_processes = num_processes
+
+#     def _gather_cellularized_returns(self, all_cell_returns):
+#         flattened_returns = []
+#         for actual_cell_returns in ray.get(all_cell_returns):
+#             flattened_returns.extend(actual_cell_returns)
+#         return flattened_returns
+
+#     def batch_reset(self):
+#         all_cell_returns = []
+#         for cell in self.cells:
+#             cell_returns = cell.batch_reset.remote()
+#             all_cell_returns.append(cell_returns)
+#         return self._gather_cellularized_returns(all_cell_returns)
+
+#     def batched_action_space_sample(self):
+#         all_cell_returns = []
+#         for cell in self.cells:
+#             cell_returns = cell.batched_action_space_sample.remote()
+#             all_cell_returns.append(cell_returns)
+#         return self._gather_cellularized_returns(all_cell_returns)
+
+#     def _decompose_returns(self, flattened_cell_returns: List):
+#         # TODO: explain
+#         n_items = len(flattened_cell_returns[0])
+#         items = [[] for _ in range(n_items)]
+
+#         for flat_cell_returns in flattened_cell_returns:
+
+
+#     def batch_step(self, actions: List, frozen_mask=None):
+#         all_cell_returns = []
+#         for rank, cell in enumerate(self.cells):
+#             start = rank * self.num_envs_per_proc
+#             end = start + self.num_envs_per_proc
+#             cell_actions = actions[start:end]
+#             cell_returns = cell.batch_step.remote(cell_actions, frozen_mask=frozen_mask)
+#             all_cell_returns.append(cell_returns)
+#         flattened_cell_returns = self._gather_cellularized_returns(all_cell_returns)
+
+#         # TODO: apply observation encoder to states (?)
+
+#         return self._decompose_returns(flattened_cell_returns)
