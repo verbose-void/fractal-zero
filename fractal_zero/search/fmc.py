@@ -12,8 +12,12 @@ from fractal_zero.vectorized_environment import VectorizedEnvironment
 def _l2_distance(vec0, vec1):
     if vec0.dim() > 2:
         vec0 = vec0.flatten(start_dim=1)
+    elif vec0.dim() == 1:
+        vec0 = vec0.unsqueeze(-1)
     if vec1.dim() > 2:
         vec1 = vec1.flatten(start_dim=1)
+    elif vec1.dim() == 1:
+        vec1 = vec1.unsqueeze(-1)
     return torch.norm(vec0 - vec1, dim=-1)
 
 
@@ -34,6 +38,8 @@ _ATTRIBUTES_TO_CLONE = (
     "dones",
     "scores",
     "observations",
+    "actions",
+    "infos",
 )
 
 
@@ -45,6 +51,7 @@ class FMC:
         similarity_function: Callable = _l2_distance,
         freeze_best: bool = True,
         track_tree: bool = True,
+        prune_tree: bool = True,
     ):
         self.vec_env = vectorized_environment
         self.balance = balance
@@ -52,6 +59,7 @@ class FMC:
 
         self.freeze_best = freeze_best
         self.track_tree = track_tree
+        self.prune_tree = prune_tree
 
         self.reset()
 
@@ -72,7 +80,8 @@ class FMC:
         self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
         self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
 
-        self.tree = GameTree(self.num_walkers, prune=True, root_observation=root_obs) if self.track_tree else None
+        self.tree = GameTree(self.num_walkers, prune=self.prune_tree, root_observation=root_obs) if self.track_tree else None
+        self.did_early_exit = False
 
     @property
     def num_walkers(self):
@@ -83,19 +92,26 @@ class FMC:
 
     @torch.no_grad()
     def simulate(self, steps: int, use_tqdm: bool = False):
+        if self.did_early_exit:
+            raise ValueError("Already early exited.")
+
         it = tqdm(range(steps), disable=not use_tqdm)
         for _ in it:
             self._perturbate()
 
             if self._can_early_exit():
+                self.did_early_exit = True
                 break
 
             self._clone()
 
     def _perturbate(self):
-        self.actions = self.vec_env.batched_action_space_sample()
-
         freeze_steps = torch.logical_or(self.freeze_mask, self.dones)
+
+        # TODO: don't sample actions for frozen environments? (make sure to remove the comments about this)
+        # will make it more legible.
+        self.actions = self.vec_env.batched_action_space_sample() 
+
         (
             self.states,
             self.observations,
@@ -106,9 +122,15 @@ class FMC:
         self.scores += self.rewards
 
         if self.tree:
+            # NOTE: the actions that are in the tree will diverge slightly from
+            # those being represented by FMC's internal state. The reason for this is
+            # that when we freeze certain environments in the vectorized environment
+            # object, the actions that are sampled will not be enacted, and the previous
+            # return values will be provided.
             self.tree.build_next_level(
                 self.actions, self.observations, self.rewards, freeze_steps,
             )
+
         self._set_freeze_mask()
 
     def _set_freeze_mask(self):

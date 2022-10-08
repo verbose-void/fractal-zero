@@ -38,3 +38,4 @@ def test_tree():
     assert tree.g.out_degree(tree.root) == 8
     assert tree.g.in_degree(tree.root) == 0
     assert tree.root.num_child_walkers == n
+    
