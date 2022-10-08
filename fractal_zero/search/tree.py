@@ -19,10 +19,7 @@ class StateNode:
         self.visits = 1
 
     def __str__(self) -> str:
-        return f"{self.num_child_walkers}"
-
-    def __repr__(self):
-        return self.__str__()
+        return f"State(nc={self.num_child_walkers}, c={self.visits}, r={self.reward})"
 
 
 class Path:
@@ -217,6 +214,12 @@ class GameTree:
     @property
     def last_actions(self):
         return [p.last_action for p in self.walker_paths]
+
+    def get_depths(self) -> np.ndarray:
+        depths = np.zeros(self.num_walkers, dtype=float)
+        for i, path in enumerate(self.walker_paths):
+            depths[i] = len(path)
+        return depths
 
     def render(self):
         colors = []

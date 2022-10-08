@@ -48,6 +48,7 @@ class FMC:
         self,
         vectorized_environment: VectorizedEnvironment,
         balance: float = 1.0,
+        use_average_rewards: bool = False,
         similarity_function: Callable = _l2_distance,
         freeze_best: bool = True,
         track_tree: bool = True,
@@ -55,6 +56,7 @@ class FMC:
     ):
         self.vec_env = vectorized_environment
         self.balance = balance
+        self.use_average_rewards = use_average_rewards
         self.similarity_function = similarity_function
 
         self.freeze_best = freeze_best
@@ -120,6 +122,7 @@ class FMC:
             self.infos,
         ) = self.vec_env.batch_step(self.actions, freeze_steps)
         self.scores += self.rewards
+        self.average_rewards = self.scores / self.tree.get_depths()
 
         if self.tree:
             # NOTE: the actions that are in the tree will diverge slightly from
@@ -136,7 +139,11 @@ class FMC:
     def _set_freeze_mask(self):
         self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
         if self.freeze_best:
-            self.freeze_mask[self.scores.argmax()] = 1
+            if self.use_average_rewards:
+                metric = self.average_rewards.argmax()
+            else:
+                metric = self.scores
+            self.freeze_mask[metric.argmax()] = 1
 
     def _set_valid_clone_partners(self):
         valid_clone_partners = np.arange(self.num_walkers)
@@ -155,7 +162,12 @@ class FMC:
         )
 
         rel_sim = _relativize_vector(self.similarities)
-        rel_score = _relativize_vector(self.scores)
+
+        if self.use_average_rewards:
+            rel_score = _relativize_vector(self.average_rewards)
+        else:
+            rel_score = _relativize_vector(self.scores)
+
         self.virtual_rewards = rel_score**self.balance * rel_sim
 
         vr = self.virtual_rewards
