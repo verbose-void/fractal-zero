@@ -1,4 +1,7 @@
+from copy import deepcopy
+from typing import Any, List, Sequence
 import gym
+import numpy as np
 
 import torch
 import torch.nn.functional as F
@@ -43,3 +46,33 @@ def mean_min_max_dict(name: str, arr) -> dict:
         f"{name}/min": arr.min(),
         f"{name}/max": arr.max(),
     }
+
+def _clone_sequence(l: Sequence, clone_partners, clone_mask, do_copy: bool = False):
+    assert len(clone_mask) == len(clone_partners) == len(l)
+
+    new_list = []
+    for i in range(len(clone_mask)):
+        do_clone = clone_mask[i]
+        partner = clone_partners[i]
+
+        if do_clone:
+            # NOTE: may not need to deepcopy.
+            if do_copy:
+                new_list.append(deepcopy(l[partner]))
+            else:
+                new_list.append(l[partner])
+        else:
+            new_list.append(l[i])
+    return new_list
+
+
+def cloning_primitive(subject: Any, clone_partners, clone_mask):
+    if isinstance(subject, (np.ndarray, torch.Tensor)):
+        subject[clone_mask] = subject[clone_partners][clone_mask]
+        cloned_subject = subject
+    elif isinstance(subject, Sequence):
+        cloned_subject = _clone_sequence(subject, clone_partners, clone_mask)
+    else:
+        raise NotImplementedError()
+    return cloned_subject
+    
