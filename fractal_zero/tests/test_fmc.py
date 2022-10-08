@@ -18,6 +18,7 @@ import pytest
 with_vec_envs = pytest.mark.parametrize(
     "vec_env_class", [SerialVectorizedEnvironment, RayVectorizedEnvironment]
 )
+cloning = pytest.mark.parametrize("disable_cloning", [True, False])
 
 # def _check_last_actions(fmc: FMC):
 #     last_actions = fmc.tree.last_actions
@@ -166,14 +167,19 @@ def test_cloning(with_freeze, prune):
     for path in fmc.tree.walker_paths:
         _check_tree_observations(path)
 
+@cloning
 @with_vec_envs
-def test_cartpole_actual_environment(vec_env_class):
+def test_cartpole_actual_environment(vec_env_class, disable_cloning):
     env = gym.make("CartPole-v0")
 
     n = 16
     vec_env = vec_env_class(env, n=n)
-    fmc = FMC(vec_env)
-    _assert_mean_total_rewards(fmc, 64, 50, use_tqdm=True)
+    fmc = FMC(vec_env, disable_cloning=disable_cloning)
+
+    if disable_cloning:
+        _assert_mean_total_rewards(fmc, 64, 20, use_tqdm=True)
+    else:
+        _assert_mean_total_rewards(fmc, 64, 50, use_tqdm=True)
 
 
 # def test_cartpole_dynamics_function():
