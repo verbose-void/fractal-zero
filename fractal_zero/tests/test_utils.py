@@ -20,7 +20,9 @@ def test_cloning_primitive():
         np.testing.assert_equal(x[partners[clone_mask]], x[partners][clone_mask])
 
         np_cloned = cloning_primitive(x.copy(), partners, clone_mask)
-        th_cloned = cloning_primitive(torch.tensor(x.copy()), torch.tensor(partners), torch.tensor(clone_mask))
+        th_cloned = cloning_primitive(
+            torch.tensor(x.copy()), torch.tensor(partners), torch.tensor(clone_mask)
+        )
         list_cloned = cloning_primitive(x.copy().tolist(), partners, clone_mask)
 
         np.testing.assert_equal(x, orig_x)

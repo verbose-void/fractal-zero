@@ -14,7 +14,9 @@ class StateNode:
     ):
         self.id = uuid4()
         self.observation = observation
-        self.reward = float(reward)  # LOL WRAPPING THIS WITH FLOAT SOLVED SO MANY ISSUES!!!
+        self.reward = float(
+            reward
+        )  # LOL WRAPPING THIS WITH FLOAT SOLVED SO MANY ISSUES!!!
         self.terminal = terminal
 
         self.num_child_walkers = num_child_walkers
@@ -58,7 +60,7 @@ class Path:
 
         # don't copy, just update reference
         saw_common = False
-        cloning_path.ordered_states.clear()  
+        cloning_path.ordered_states.clear()
         last_state = None
         for new_state in new_path.ordered_states:
             if new_state is common_state:
@@ -69,8 +71,10 @@ class Path:
 
             # sanity check
             if last_state and not cloning_path.g.has_edge(last_state, new_state):
-                raise ValueError(f"No edge exists between {last_state} and {new_state}.")
-                
+                raise ValueError(
+                    f"No edge exists between {last_state} and {new_state}."
+                )
+
             new_state.visits += 1
             cloning_path.add_node(new_state)
             last_state = new_state
@@ -187,7 +191,7 @@ class GameTree:
         # TODO: how can we detect duplicate observations / action transitions to save memory? (might not be super important)
         it = zip(self.walker_paths, actions, new_observations, rewards, freeze_mask)
         for path, action, new_observation, reward, frozen in it:
-            if frozen:  
+            if frozen:
                 continue
 
             last_node = path.last_node
@@ -200,11 +204,14 @@ class GameTree:
 
     def clone(self, partners: Sequence, clone_mask: Sequence):
         old_paths: List[Path] = []
+
         def _clone_func(path: Path, target_path: Path):
             old_paths.append(path)
             return path.clone_to(target_path, return_new_path=True)
 
-        self.walker_paths = cloning_primitive(self.walker_paths, partners, clone_mask, clone_func=_clone_func)
+        self.walker_paths = cloning_primitive(
+            self.walker_paths, partners, clone_mask, clone_func=_clone_func
+        )
 
         # yes, loop after.
         if self.prune:

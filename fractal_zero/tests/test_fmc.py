@@ -28,6 +28,7 @@ cloning = pytest.mark.parametrize("disable_cloning", [True, False])
 #     for last_action, expected_action in zip(last_actions, fmc.actions):
 #         assert last_action == expected_action
 
+
 def _assert_tree_equivalence(fmc: FMC):
     # NOTE: the actions that are in the tree will diverge slightly from
     # those being represented by FMC's internal state. The reason for this is
@@ -51,9 +52,7 @@ def _assert_tree_equivalence(fmc: FMC):
     assert expected_best_walker_path == fmc.tree.best_path
 
 
-def _assert_mean_total_rewards(
-    fmc: FMC, steps, expected_mean_reward, trials=32
-):
+def _assert_mean_total_rewards(fmc: FMC, steps, expected_mean_reward, trials=32):
     total_rewards = []
 
     for _ in range(trials):
@@ -73,6 +72,7 @@ def _assert_mean_total_rewards(
         total_rewards.append(total_reward)
 
     assert np.mean(total_rewards) > expected_mean_reward
+
 
 def _tree_structural_assertions(fmc: FMC, steps: int):
     with_freeze = fmc.freeze_best
@@ -105,7 +105,9 @@ def _tree_structural_assertions(fmc: FMC, steps: int):
         for state in path.ordered_states:
             assert state in fmc.tree.g, "Don't over-prune."
             if last_state is not None:
-                assert fmc.tree.g.has_edge(last_state, state), "All nodes on the same path must be linearly connected."
+                assert fmc.tree.g.has_edge(
+                    last_state, state
+                ), "All nodes on the same path must be linearly connected."
                 assert path.g.in_degree(state) == 1
             last_state = state
 
@@ -135,7 +137,12 @@ def test_cloning(with_freeze, prune, disable_cloning):
     # vec_env = vec_env_class(DummyEnvironment(), n=n)
     vec_env = SerialVectorizedEnvironment(DummyEnvironment(), n=n)
 
-    fmc = FMC(vec_env, freeze_best=with_freeze, prune_tree=prune, disable_cloning=disable_cloning)
+    fmc = FMC(
+        vec_env,
+        freeze_best=with_freeze,
+        prune_tree=prune,
+        disable_cloning=disable_cloning,
+    )
 
     np.testing.assert_allclose(fmc.scores.numpy(), fmc.tree.get_total_rewards())
 
@@ -160,7 +167,7 @@ def test_cloning(with_freeze, prune, disable_cloning):
         # when no walkers are frozen, the depths should all be consistent.
         d = fmc.tree.get_depths()
         if with_freeze:
-            assert np.all(d <= (step+1) * 3)
+            assert np.all(d <= (step + 1) * 3)
         else:
             np.testing.assert_allclose(d, d[0])
 
@@ -173,11 +180,14 @@ def test_cloning(with_freeze, prune, disable_cloning):
             assert state.observation == expected_score
             expected_score += action  # yes, we're checking this because clones have the potential to disrupt in the case of a bug.
         expected_score += path.ordered_states[-1].reward
-        assert expected_score == path.total_reward, "Iterating through the path should only yield the states that have following states (with action transitions)."
+        assert (
+            expected_score == path.total_reward
+        ), "Iterating through the path should only yield the states that have following states (with action transitions)."
 
     # ensure that if you replay the best path, the score is as expected.
     for path in fmc.tree.walker_paths:
         _check_tree_observations(path)
+
 
 @cloning
 @with_vec_envs

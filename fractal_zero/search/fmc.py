@@ -86,7 +86,11 @@ class FMC:
         self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
         self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
 
-        self.tree = GameTree(self.num_walkers, prune=self.prune_tree, root_observation=root_obs) if self.track_tree else None
+        self.tree = (
+            GameTree(self.num_walkers, prune=self.prune_tree, root_observation=root_obs)
+            if self.track_tree
+            else None
+        )
         self.did_early_exit = False
 
     @property
@@ -116,7 +120,7 @@ class FMC:
 
         # TODO: don't sample actions for frozen environments? (make sure to remove the comments about this)
         # will make it more legible.
-        self.actions = self.vec_env.batched_action_space_sample() 
+        self.actions = self.vec_env.batched_action_space_sample()
 
         (
             self.states,
@@ -135,7 +139,10 @@ class FMC:
             # object, the actions that are sampled will not be enacted, and the previous
             # return values will be provided.
             self.tree.build_next_level(
-                self.actions, self.observations, self.rewards, freeze_steps,
+                self.actions,
+                self.observations,
+                self.rewards,
+                freeze_steps,
             )
 
         self._set_freeze_mask()
@@ -180,7 +187,9 @@ class FMC:
         self.clone_mask = (value >= torch.rand(1)).bool()
 
         # clone all walkers at terminal states
-        self.clone_mask[self.dones] = True  # NOTE: sometimes done might be a preferable terminal state (winning)... deal with this.
+        self.clone_mask[
+            self.dones
+        ] = True  # NOTE: sometimes done might be a preferable terminal state (winning)... deal with this.
         # don't clone frozen walkers
         self.clone_mask[self.freeze_mask] = False
 
@@ -203,6 +212,8 @@ class FMC:
     def _clone_variable(self, subject_var_name: str):
         subject = getattr(self, subject_var_name)
         # note: this will be cloned in-place!
-        cloned_subject = cloning_primitive(subject, self.clone_partners, self.clone_mask)
+        cloned_subject = cloning_primitive(
+            subject, self.clone_partners, self.clone_mask
+        )
         setattr(self, subject_var_name, cloned_subject)
         return cloned_subject

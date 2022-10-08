@@ -54,7 +54,7 @@ class _RayWrappedEnvironment:
 
     def set_state(self, env: gym.Env):
         self.last_ret = None
-        
+
         if not isinstance(env, gym.Env):
             raise ValueError(f"Expected a gym environment. Got {type(env)}.")
 
