@@ -37,6 +37,7 @@ _ATTRIBUTES_TO_CLONE = (
     "rewards",
     "dones",
     "scores",
+    "average_rewards",
     "observations",
     "actions",
     "infos",
@@ -48,6 +49,7 @@ class FMC:
         self,
         vectorized_environment: VectorizedEnvironment,
         balance: float = 1.0,
+        disable_cloning: bool = False,
         use_average_rewards: bool = False,
         similarity_function: Callable = _l2_distance,
         freeze_best: bool = True,
@@ -56,6 +58,7 @@ class FMC:
     ):
         self.vec_env = vectorized_environment
         self.balance = balance
+        self.disable_cloning = disable_cloning
         self.use_average_rewards = use_average_rewards
         self.similarity_function = similarity_function
 
@@ -79,6 +82,7 @@ class FMC:
         )
 
         self.scores = torch.zeros(self.num_walkers, dtype=float)
+        self.average_rewards = torch.zeros(self.num_walkers, dtype=float)
         self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
         self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
 
@@ -176,13 +180,16 @@ class FMC:
         self.clone_mask = (value >= torch.rand(1)).bool()
 
         # clone all walkers at terminal states
-        self.clone_mask[self.dones] = True
+        self.clone_mask[self.dones] = True  # NOTE: sometimes done might be a preferable terminal state (winning)... deal with this.
         # don't clone frozen walkers
         self.clone_mask[self.freeze_mask] = False
 
     def _clone(self):
         self._set_clone_variables()
 
+        if self.disable_cloning:
+            return
+            
         self.vec_env.clone(self.clone_partners, self.clone_mask)
         if self.tree:
             self.tree.clone(self.clone_partners, self.clone_mask)

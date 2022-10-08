@@ -111,6 +111,9 @@ class Path:
         edge_data = self.g.get_edge_data(state, next_state)
         return edge_data["action"]
 
+    def __str__(self):
+        return f"Path(len={len(self)}, total_reward={self.total_reward})"
+
     def __len__(self):
         return len(self.ordered_states)
 
@@ -121,7 +124,7 @@ class Path:
     def __next__(self):
         # stop one early because the last state should have no child nodes
         # therefore there won't be any actions registered for that state for this path.
-        if self._iter >= len(self) - 1:
+        if self._iter >= len(self) - 2:
             raise StopIteration
 
         state = self.ordered_states[self._iter]
@@ -220,6 +223,9 @@ class GameTree:
         for i, path in enumerate(self.walker_paths):
             depths[i] = len(path)
         return depths
+
+    def get_total_rewards(self):
+        return np.array([p.total_reward for p in self.walker_paths], dtype=float)
 
     def render(self):
         colors = []
