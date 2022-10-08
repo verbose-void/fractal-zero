@@ -19,7 +19,7 @@ USE_TQDM = False
 
 
 with_vec_envs = pytest.mark.parametrize(
-    "vec_env_class", [SerialVectorizedEnvironment]#, RayVectorizedEnvironment]
+    "vec_env_class", [SerialVectorizedEnvironment, RayVectorizedEnvironment]
 )
 cloning = pytest.mark.parametrize("disable_cloning", [True, False])
 

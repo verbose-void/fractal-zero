@@ -14,7 +14,7 @@ class StateNode:
     ):
         self.id = uuid4()
         self.observation = observation
-        self.reward = reward
+        self.reward = float(reward)  # LOL WRAPPING THIS WITH FLOAT SOLVED SO MANY ISSUES!!!
         self.terminal = terminal
 
         self.num_child_walkers = num_child_walkers
@@ -75,6 +75,9 @@ class Path:
             cloning_path.add_node(new_state)
             last_state = new_state
 
+        assert len(cloning_path) == len(new_path)
+        assert cloning_path.total_reward == new_path.total_reward
+
         if return_new_path:
             return cloning_path
 
@@ -89,6 +92,10 @@ class Path:
                 # also, if a state was already pruned, it's safe to assume their parents were as well,
                 # so we can break.
                 break
+
+        # clear just so this path doesn't get used again.
+        self.ordered_states.clear()
+        self.ordered_states = None
 
     @property
     def total_reward(self) -> float:

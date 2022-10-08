@@ -189,10 +189,6 @@ class FMC:
 
         if self.disable_cloning:
             return
-            
-        # if not np.all(self.scores.numpy() == self.tree.get_total_rewards()):
-        #     raise ValueError
-
         self.vec_env.clone(self.clone_partners, self.clone_mask)
         if self.tree:
             self.tree.clone(self.clone_partners, self.clone_mask)
@@ -200,8 +196,9 @@ class FMC:
         for attr in _ATTRIBUTES_TO_CLONE:
             self._clone_variable(attr)
 
-        # if not np.all(self.scores.numpy() == self.tree.get_total_rewards()):
-            # raise ValueError
+        # sanity check (TODO: maybe remove this?)
+        if not np.all(self.scores.numpy() == self.tree.get_total_rewards()):
+            raise ValueError
 
     def _clone_variable(self, subject_var_name: str):
         subject = getattr(self, subject_var_name)
