@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 # from fractal_zero.search.fmc import FMC
 from fractal_zero.search.fmc import FMC
+from fractal_zero.search.tree import Path
 from fractal_zero.vectorized_environment import (
     RayVectorizedEnvironment,
     SerialVectorizedEnvironment,
@@ -118,6 +119,7 @@ def test_cloning(with_freeze, prune):
 
         def reset(self):
             self.state = 0
+            return self.state
 
         def step(self, action):
             self.state += action
@@ -132,7 +134,7 @@ def test_cloning(with_freeze, prune):
 
     num_clones = 0
     for step in range(steps):
-        fmc.simulate(1, use_tqdm=True)
+        fmc.simulate(1, use_tqdm=False)
         num_clones += fmc.clone_mask.sum()
         upper_bound_score = (step + 1) * 2
 
@@ -146,6 +148,17 @@ def test_cloning(with_freeze, prune):
     assert num_clones > steps, "Probably... lol"
     _tree_structural_assertions(fmc, steps)
 
+    def _check_observations(path: Path):
+        expected_score = 0
+        for state, action in path:
+            assert state.observation == expected_score
+            expected_score += action  # yes, we're checking this because clones have the potential to disrupt in the case of a bug.
+        expected_score += path.ordered_states[-1].reward
+        assert expected_score == path.total_reward, "Iterating through the path should only yield the states that have following states (with action transitions)."
+
+    # ensure that if you replay the best path, the score is as expected.
+    for path in fmc.tree.walker_paths:
+        _check_observations(path)
 
 @with_vec_envs
 def test_cartpole_actual_environment(vec_env_class):
