@@ -5,6 +5,7 @@ import numpy as np
 
 from tqdm import tqdm
 from fractal_zero.search.tree import GameTree
+from fractal_zero.utils import cloning_primitive
 
 from fractal_zero.vectorized_environment import VectorizedEnvironment
 
@@ -38,7 +39,6 @@ _ATTRIBUTES_TO_CLONE = (
     "dones",
     "scores",
     "average_rewards",
-    "observations",
     "actions",
     "infos",
 )
@@ -190,6 +190,9 @@ class FMC:
         if self.disable_cloning:
             return
             
+        # if not np.all(self.scores.numpy() == self.tree.get_total_rewards()):
+        #     raise ValueError
+
         self.vec_env.clone(self.clone_partners, self.clone_mask)
         if self.tree:
             self.tree.clone(self.clone_partners, self.clone_mask)
@@ -197,33 +200,12 @@ class FMC:
         for attr in _ATTRIBUTES_TO_CLONE:
             self._clone_variable(attr)
 
-    def _clone_vector_inplace(self, vector):
-        vector[self.clone_mask] = vector[self.clone_partners[self.clone_mask]]
-        return vector
+        # if not np.all(self.scores.numpy() == self.tree.get_total_rewards()):
+            # raise ValueError
 
-    def _clone_list(self, l: List, copy: bool = False):
-        new_list = []
-        for i in range(self.num_walkers):
-            do_clone = self.clone_mask[i]
-            partner = self.clone_partners[i]
-
-            if do_clone:
-                # NOTE: may not need to deepcopy.
-                if copy:
-                    new_list.append(deepcopy(l[partner]))
-                else:
-                    new_list.append(l[partner])
-            else:
-                new_list.append(l[i])
-        return new_list
-
-    def _clone_variable(self, subject):
-        if isinstance(subject, torch.Tensor):
-            return self._clone_vector_inplace(subject)
-        elif isinstance(subject, list):
-            return self._clone_list(subject)
-        elif isinstance(subject, str):
-            cloned_subject = self._clone_variable(getattr(self, subject))
-            setattr(self, subject, cloned_subject)
-            return cloned_subject
-        raise NotImplementedError()
+    def _clone_variable(self, subject_var_name: str):
+        subject = getattr(self, subject_var_name)
+        # note: this will be cloned in-place!
+        cloned_subject = cloning_primitive(subject, self.clone_partners, self.clone_mask)
+        setattr(self, subject_var_name, cloned_subject)
+        return cloned_subject

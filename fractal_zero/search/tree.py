@@ -5,6 +5,8 @@ from typing import List, Sequence
 from uuid import UUID, uuid4
 import numpy as np
 
+from fractal_zero.utils import cloning_primitive
+
 
 class StateNode:
     def __init__(
@@ -114,6 +116,9 @@ class Path:
     def __str__(self):
         return f"Path(len={len(self)}, total_reward={self.total_reward})"
 
+    def __repr__(self) -> str:
+        return self.__str__()
+
     def __len__(self):
         return len(self.ordered_states)
 
@@ -187,26 +192,17 @@ class GameTree:
             self.g.add_edge(last_node, new_node, action=action)
 
     def clone(self, partners: Sequence, clone_mask: Sequence):
-        new_paths = []
-        old_paths = []
-
-        for i, path in enumerate(self.walker_paths):
-
-            if not clone_mask[i]:
-                # do not clone
-                new_paths.append(path)
-                continue
-
-            target_path = self.walker_paths[partners[i]]
-            new_path = path.clone_to(target_path, return_new_path=True)
-            new_paths.append(new_path)
+        old_paths: List[Path] = []
+        def _clone_func(path: Path, target_path: Path):
             old_paths.append(path)
+            return path.clone_to(target_path, return_new_path=True)
 
+        self.walker_paths = cloning_primitive(self.walker_paths, partners, clone_mask, clone_func=_clone_func)
+
+        # yes, loop after.
         if self.prune:
             for path in old_paths:
                 path.prune()
-
-        self.walker_paths = new_paths
 
     @property
     def best_path(self):

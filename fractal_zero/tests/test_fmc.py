@@ -109,10 +109,11 @@ def _tree_structural_assertions(fmc: FMC, steps: int):
     assert nx.is_tree(fmc.tree.g)
 
 
+@cloning
 @pytest.mark.parametrize("with_freeze", [False, True])
 @pytest.mark.parametrize("prune", [False, True])
 # @with_vec_envs
-def test_cloning(with_freeze, prune):
+def test_cloning(with_freeze, prune, disable_cloning):
     class DummyEnvironment:
         def __init__(self):
             self.reset()
@@ -131,7 +132,9 @@ def test_cloning(with_freeze, prune):
     # vec_env = vec_env_class(DummyEnvironment(), n=n)
     vec_env = SerialVectorizedEnvironment(DummyEnvironment(), n=n)
 
-    fmc = FMC(vec_env, freeze_best=with_freeze, prune_tree=prune)
+    fmc = FMC(vec_env, freeze_best=with_freeze, prune_tree=prune, disable_cloning=disable_cloning)
+
+    np.testing.assert_allclose(fmc.scores.numpy(), fmc.tree.get_total_rewards())
 
     num_clones = 0
     for step in range(steps):
@@ -143,6 +146,13 @@ def test_cloning(with_freeze, prune):
         assert len(fmc.similarities) == fmc.num_walkers
         assert len(fmc.scores) == fmc.num_walkers
         assert len(fmc.actions) == fmc.num_walkers
+
+        if disable_cloning:
+            assert fmc.actions == fmc.tree.last_actions
+
+        assert fmc.states.tolist() == fmc.observations
+        np.testing.assert_allclose(fmc.scores.numpy(), fmc.states.numpy())
+        np.testing.assert_allclose(fmc.scores.numpy(), fmc.tree.get_total_rewards())
 
         # when no walkers are frozen, the depths should all be consistent.
         d = fmc.tree.get_depths()

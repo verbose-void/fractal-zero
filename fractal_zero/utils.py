@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, List, Sequence
+from typing import Any, Callable, List, Sequence
 import gym
 import numpy as np
 
@@ -47,7 +47,7 @@ def mean_min_max_dict(name: str, arr) -> dict:
         f"{name}/max": arr.max(),
     }
 
-def _clone_sequence(l: Sequence, clone_partners, clone_mask, do_copy: bool = False):
+def _clone_sequence(l: Sequence, clone_partners, clone_mask, clone_func: Callable=None):
     assert len(clone_mask) == len(clone_partners) == len(l)
 
     new_list = []
@@ -57,22 +57,25 @@ def _clone_sequence(l: Sequence, clone_partners, clone_mask, do_copy: bool = Fal
 
         if do_clone:
             # NOTE: may not need to deepcopy.
-            if do_copy:
-                new_list.append(deepcopy(l[partner]))
+            if clone_func is not None:
+                item = clone_func(l[i], l[partner])
             else:
-                new_list.append(l[partner])
+                item = l[partner]
         else:
-            new_list.append(l[i])
+            item = l[i]
+
+        new_list.append(item)
     return new_list
 
 
-def cloning_primitive(subject: Any, clone_partners, clone_mask):
+def cloning_primitive(subject: Any, clone_partners, clone_mask, clone_func: Callable=None):
     if isinstance(subject, (np.ndarray, torch.Tensor)):
+        if clone_func is not None:
+            raise NotImplementedError("Clone funcs are only defined for sequences.")
         subject[clone_mask] = subject[clone_partners][clone_mask]
         cloned_subject = subject
     elif isinstance(subject, Sequence):
-        cloned_subject = _clone_sequence(subject, clone_partners, clone_mask)
+        cloned_subject = _clone_sequence(subject, clone_partners, clone_mask, clone_func=clone_func)
     else:
         raise NotImplementedError()
     return cloned_subject
-    
