@@ -139,16 +139,22 @@ def test_cloning(with_freeze, prune):
         upper_bound_score = (step + 1) * 2
 
         assert (fmc.scores <= upper_bound_score).all()
-
         assert len(fmc.similarities) == fmc.num_walkers
         assert len(fmc.scores) == fmc.num_walkers
         assert len(fmc.actions) == fmc.num_walkers
+
+        # when no walkers are frozen, the depths should all be consistent.
+        d = fmc.tree.get_depths()
+        if with_freeze:
+            assert np.all(d <= step)
+        else:
+            np.testing.assert_allclose(d, d[0])
 
     # fmc.tree.render()
     assert num_clones > steps, "Probably... lol"
     _tree_structural_assertions(fmc, steps)
 
-    def _check_observations(path: Path):
+    def _check_tree_observations(path: Path):
         expected_score = 0
         for state, action in path:
             assert state.observation == expected_score
@@ -158,7 +164,7 @@ def test_cloning(with_freeze, prune):
 
     # ensure that if you replay the best path, the score is as expected.
     for path in fmc.tree.walker_paths:
-        _check_observations(path)
+        _check_tree_observations(path)
 
 @with_vec_envs
 def test_cartpole_actual_environment(vec_env_class):
