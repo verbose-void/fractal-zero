@@ -23,12 +23,18 @@ def test_tree():
     # all partners with 0th walker
     partners = np.zeros(n, dtype=int)
 
+    target_state = tree.walker_paths[0].ordered_states[1]
+    assert target_state.num_child_walkers == 1
+
     # only 1 walker clones to the 0th walker
+    clone_index = 1
     clone_mask = np.zeros(n, dtype=bool)
-    clone_mask[1] = 1
+    clone_mask[clone_index] = 1
 
     tree.clone(partners, clone_mask)
-    assert (
-        tree.g.degree(tree.root) == n - 1
-    )  # 1 walker was fully cloned away and pruned.
+    # 1 walker was fully cloned away and pruned.
+    assert target_state.num_child_walkers == 2
+
+    assert tree.g.out_degree(tree.root) == 8
+    assert tree.g.in_degree(tree.root) == 0
     assert tree.root.num_child_walkers == n
