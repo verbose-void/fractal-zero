@@ -15,8 +15,11 @@ from fractal_zero.vectorized_environment import (
 import pytest
 
 
+USE_TQDM = False
+
+
 with_vec_envs = pytest.mark.parametrize(
-    "vec_env_class", [SerialVectorizedEnvironment, RayVectorizedEnvironment]
+    "vec_env_class", [SerialVectorizedEnvironment]#, RayVectorizedEnvironment]
 )
 cloning = pytest.mark.parametrize("disable_cloning", [True, False])
 
@@ -49,7 +52,7 @@ def _assert_tree_equivalence(fmc: FMC):
 
 
 def _assert_mean_total_rewards(
-    fmc: FMC, steps, expected_mean_reward, use_tqdm=False, trials=32
+    fmc: FMC, steps, expected_mean_reward, trials=32
 ):
     total_rewards = []
 
@@ -57,7 +60,7 @@ def _assert_mean_total_rewards(
         fmc.reset()
 
         # 1 step at a time
-        for _ in tqdm(range(steps), disable=not use_tqdm):
+        for _ in tqdm(range(steps), disable=not USE_TQDM):
             fmc.simulate(1)
             _assert_tree_equivalence(fmc)
             # cartpole has a max reward of 200.
@@ -110,7 +113,7 @@ def _tree_structural_assertions(fmc: FMC, steps: int):
 
 
 @cloning
-@pytest.mark.parametrize("with_freeze", [False, True])
+@pytest.mark.parametrize("with_freeze", [True, False])
 @pytest.mark.parametrize("prune", [False, True])
 # @with_vec_envs
 def test_cloning(with_freeze, prune, disable_cloning):
@@ -138,7 +141,7 @@ def test_cloning(with_freeze, prune, disable_cloning):
 
     num_clones = 0
     for step in range(steps):
-        fmc.simulate(1, use_tqdm=False)
+        fmc.simulate(1)
         num_clones += fmc.clone_mask.sum()
         upper_bound_score = (step + 1) * 2
 
@@ -147,7 +150,7 @@ def test_cloning(with_freeze, prune, disable_cloning):
         assert len(fmc.scores) == fmc.num_walkers
         assert len(fmc.actions) == fmc.num_walkers
 
-        if disable_cloning:
+        if disable_cloning and not with_freeze:
             assert fmc.actions == fmc.tree.last_actions
 
         assert fmc.states.tolist() == fmc.observations
@@ -157,12 +160,11 @@ def test_cloning(with_freeze, prune, disable_cloning):
         # when no walkers are frozen, the depths should all be consistent.
         d = fmc.tree.get_depths()
         if with_freeze:
-            assert np.all(d <= step)
+            assert np.all(d <= (step+1) * 3)
         else:
             np.testing.assert_allclose(d, d[0])
 
     # fmc.tree.render()
-    assert num_clones > steps, "Probably... lol"
     _tree_structural_assertions(fmc, steps)
 
     def _check_tree_observations(path: Path):
@@ -187,9 +189,9 @@ def test_cartpole_actual_environment(vec_env_class, disable_cloning):
     fmc = FMC(vec_env, disable_cloning=disable_cloning)
 
     if disable_cloning:
-        _assert_mean_total_rewards(fmc, 64, 20, use_tqdm=True)
+        _assert_mean_total_rewards(fmc, 64, 20)
     else:
-        _assert_mean_total_rewards(fmc, 64, 50, use_tqdm=True)
+        _assert_mean_total_rewards(fmc, 64, 50)
 
 
 # def test_cartpole_dynamics_function():
@@ -216,4 +218,4 @@ def test_cartpole_consistently_high_reward():
     fmc = FMC(vec_env, balance=1)
 
     # 200 is the max reward accumulate-able in cartpole.
-    _assert_mean_total_rewards(fmc, 400, 140, use_tqdm=True)
+    _assert_mean_total_rewards(fmc, 400, 140)

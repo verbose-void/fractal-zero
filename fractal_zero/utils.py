@@ -65,6 +65,8 @@ def _clone_sequence(l: Sequence, clone_partners, clone_mask, clone_func: Callabl
             item = l[i]
 
         new_list.append(item)
+
+    assert len(new_list) == len(l)
     return new_list
 
 
