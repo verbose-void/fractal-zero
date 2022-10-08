@@ -13,10 +13,13 @@ class StateNode:
         self, observation, reward, num_child_walkers: int = 1, terminal: bool = False
     ):
         self.id = uuid4()
-        self.observation = observation
-        self.reward = float(
-            reward
-        )  # LOL WRAPPING THIS WITH FLOAT SOLVED SO MANY ISSUES!!!
+
+        # this copy is probably necessary.
+        self.observation = copy(observation)
+
+        # LOL WRAPPING THIS WITH FLOAT SOLVED SO MANY ISSUES!!!
+        self.reward = float(reward)
+
         self.terminal = terminal
 
         self.num_child_walkers = num_child_walkers
@@ -200,7 +203,7 @@ class GameTree:
             new_node = StateNode(new_observation, reward, terminal=False)
             path.add_node(new_node)
 
-            self.g.add_edge(last_node, new_node, action=action)
+            self.g.add_edge(last_node, new_node, action=copy(action))
 
     def clone(self, partners: Sequence, clone_mask: Sequence):
         old_paths: List[Path] = []
