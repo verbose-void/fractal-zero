@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from typing import List, Sequence
 from uuid import UUID, uuid4
 import numpy as np
+import torch
 
 from fractal_zero.utils import cloning_primitive
 
@@ -14,11 +15,10 @@ class StateNode:
     ):
         self.id = uuid4()
 
-        # this copy is probably necessary.
-        self.observation = copy(observation)
-
-        # LOL WRAPPING THIS WITH FLOAT SOLVED SO MANY ISSUES!!!
-        self.reward = float(reward)
+        # NOTE: these may hold references to elements within a tensors. in that case, cloning
+        # could be compromised if the original tensors are modified in-place.
+        self.observation = observation
+        self.reward = reward
 
         self.terminal = terminal
 
@@ -232,13 +232,13 @@ class GameTree:
         return [p.last_action for p in self.walker_paths]
 
     def get_depths(self) -> np.ndarray:
-        depths = np.zeros(self.num_walkers, dtype=float)
+        depths = torch.zeros(self.num_walkers, dtype=float)
         for i, path in enumerate(self.walker_paths):
             depths[i] = len(path)
         return depths
 
     def get_total_rewards(self):
-        return np.array([p.total_reward for p in self.walker_paths], dtype=float)
+        return torch.tensor([p.total_reward for p in self.walker_paths], dtype=float)
 
     def render(self, label_type: str="reward"):
         colors = []

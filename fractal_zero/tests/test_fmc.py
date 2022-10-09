@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import torch
 import networkx as nx
 from tqdm import tqdm
 
@@ -38,17 +39,21 @@ def _assert_tree_equivalence(fmc: FMC):
     # _check_last_actions(fmc)
 
     # check rewards are properly matching scores
-    total_rewards = np.array([p.total_reward for p in fmc.tree.walker_paths])
-    expected_total_rewards = fmc.scores.numpy()
+    # total_rewards = np.array([p.total_reward for p in fmc.tree.walker_paths])
+    # expected_total_rewards = fmc.scores.numpy()
+    total_rewards = fmc.tree.get_total_rewards()
+    expected_total_rewards = fmc.scores
 
-    np.testing.assert_allclose(total_rewards, expected_total_rewards)
+    # np.testing.assert_allclose(total_rewards, expected_total_rewards)
+    torch.testing.assert_allclose(total_rewards, expected_total_rewards)
 
     # TODO: make sure the tree's best path gets the best walker's same score.
     best_walker_index = fmc.scores.argmax()
     score = fmc.scores[best_walker_index]
 
     expected_best_walker_path = fmc.tree.walker_paths[best_walker_index]
-    assert np.isclose(score, expected_best_walker_path.total_reward)
+    # assert np.isclose(score, expected_best_walker_path.total_reward)
+    assert np.isclose(score.item(), expected_best_walker_path.total_reward)
     assert expected_best_walker_path == fmc.tree.best_path
 
 
@@ -167,9 +172,9 @@ def test_cloning(with_freeze, prune, disable_cloning):
         # when no walkers are frozen, the depths should all be consistent.
         d = fmc.tree.get_depths()
         if with_freeze:
-            assert np.all(d <= (step + 1) * 3)
+            assert torch.all(d <= (step + 1) * 3)
         else:
-            np.testing.assert_allclose(d, d[0])
+            np.testing.assert_allclose(d.numpy(), d[0].item())
 
     # fmc.tree.render()
     _tree_structural_assertions(fmc, steps)

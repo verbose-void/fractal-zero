@@ -37,22 +37,28 @@ class TreeSampler:
         observations = []
         actions = []
         weights = []
+        rewards = []
 
         path = self.tree.best_path
         for state, action in path:
+
+            observations.append(state.observation)
+            rewards.append(state.reward)
+
+            actions.append([action])
+
             # NOTE: never skip due to weight!
             weight = self._calculate_weight(state)
             weights.append([weight])
 
-            observations.append(state.observation)
-            actions.append([action])
 
-        return observations, actions, weights
+        return observations, actions, weights, rewards
 
     def _get_all_nodes_batch(self):
         observations = []
         child_actions = []
         child_weights = []
+        rewards = []
 
         g = self.tree.g
         for node in g.nodes:
@@ -77,21 +83,22 @@ class TreeSampler:
             observations.append(node.observation)
             child_actions.append(actions)
             child_weights.append(weights)
+            rewards.append(node.reward)
 
-        return observations, child_actions, child_weights
+        return observations, child_actions, child_weights, rewards
 
     def get_batch(self):
         if self.sample_type == "best_path":
-            obs, acts, weights = self._get_best_path_as_batch()
+            obs, acts, weights, rewards = self._get_best_path_as_batch()
         elif self.sample_type == "all_nodes":
-            obs, acts, weights = self._get_all_nodes_batch()
+            obs, acts, weights, rewards = self._get_all_nodes_batch()
         else:
             raise ValueError(f"Sample type {self.sample_type} is not supported.")
 
         # sanity check
-        if not (len(obs) == len(acts) == len(weights)):
+        if not (len(obs) == len(acts) == len(weights) == len(rewards)):
             raise ValueError(
-                f"Got different lengths for batch return: {len(obs)}, {len(acts)}, {len(weights)}."
+                f"Got different lengths for batch return: {len(obs)}, {len(acts)}, {len(weights)}, {len(rewards)}."
             )
 
         if self.use_wandb and wandb.run:
@@ -106,4 +113,4 @@ class TreeSampler:
                 }
             )
 
-        return obs, acts, weights
+        return obs, acts, weights, rewards

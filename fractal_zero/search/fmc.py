@@ -1,4 +1,4 @@
-from copy import deepcopy
+from copy import copy, deepcopy
 from typing import Callable, List
 import torch
 import numpy as np
@@ -100,7 +100,6 @@ class FMC:
     def _can_early_exit(self):
         return torch.all(self.dones)
 
-    @torch.no_grad()
     def simulate(self, steps: int, use_tqdm: bool = False):
         if self.did_early_exit:
             raise ValueError("Already early exited.")
@@ -202,11 +201,17 @@ class FMC:
         if self.tree:
             self.tree.clone(self.clone_partners, self.clone_mask)
 
+        # doing this allows the GameTree to retain gradients in case training a model on FMC outputs.
+        # it also is required to keep the cloning mechanism in-tact (because of inplace updates).
+        self.rewards = self.rewards.clone()
+        if isinstance(self.observations, torch.Tensor):
+            self.observations = self.observations.clone()
+
         for attr in _ATTRIBUTES_TO_CLONE:
             self._clone_variable(attr)
 
         # sanity check (TODO: maybe remove this?)
-        if not np.allclose(self.scores.numpy(), self.tree.get_total_rewards()):
+        if not torch.allclose(self.scores, self.tree.get_total_rewards()):
             raise ValueError(self.scores, self.tree.get_total_rewards())
 
     def _clone_variable(self, subject_var_name: str):
