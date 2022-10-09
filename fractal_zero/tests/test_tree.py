@@ -35,6 +35,6 @@ def test_tree():
     # 1 walker was fully cloned away and pruned.
     assert target_state.num_child_walkers == 2
 
-    assert tree.g.out_degree(tree.root) == 8
+    assert tree.g.out_degree(tree.root) == n - 1
     assert tree.g.in_degree(tree.root) == 0
     assert tree.root.num_child_walkers == n
