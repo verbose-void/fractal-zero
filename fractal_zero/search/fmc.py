@@ -206,8 +206,8 @@ class FMC:
             self._clone_variable(attr)
 
         # sanity check (TODO: maybe remove this?)
-        if not np.all(self.scores.numpy() == self.tree.get_total_rewards()):
-            raise ValueError
+        if not np.allclose(self.scores.numpy(), self.tree.get_total_rewards()):
+            raise ValueError(self.scores, self.tree.get_total_rewards())
 
     def _clone_variable(self, subject_var_name: str):
         subject = getattr(self, subject_var_name)

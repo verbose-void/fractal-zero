@@ -240,13 +240,21 @@ class GameTree:
     def get_total_rewards(self):
         return np.array([p.total_reward for p in self.walker_paths], dtype=float)
 
-    def render(self):
+    def render(self, label_type: str="reward"):
         colors = []
+        labels = {}
         for node in self.g.nodes:
             if node == self.root:
                 colors.append("green")
             else:
                 colors.append("red")
 
-        nx.draw(self.g, with_labels=True, node_color=colors, node_size=80)
+            if label_type == "reward":
+                labels[node] = f"{node.reward:.1f}"
+            elif label_type == "num_child_walkers":
+                labels[node] = f"{node.num_child_walkers}"
+            else:
+                raise NotImplementedError(label_type)
+
+        nx.draw(self.g, labels=labels, with_labels=True, node_color=colors, node_size=80)
         plt.show()
