@@ -11,7 +11,7 @@ from fractal_zero.utils import cloning_primitive
 
 class StateNode:
     def __init__(
-        self, observation, reward, num_child_walkers: int = 1, terminal: bool = False
+        self, observation, reward, info, num_child_walkers: int = 1, terminal: bool = False
     ):
         self.id = uuid4()
 
@@ -19,6 +19,7 @@ class StateNode:
         # could be compromised if the original tensors are modified in-place.
         self.observation = observation
         self.reward = reward
+        self.info = info
 
         self.terminal = terminal
 
@@ -164,6 +165,7 @@ class GameTree:
         self.root = StateNode(
             root_observation,
             reward=0,
+            info=None,
             num_child_walkers=num_children,
             terminal=False,
         )
@@ -178,6 +180,7 @@ class GameTree:
         actions: Sequence,
         new_observations: Sequence,
         rewards: Sequence,
+        infos: Sequence,
         freeze_mask=None,
     ):
         if freeze_mask is None:
@@ -192,15 +195,15 @@ class GameTree:
         )
 
         # TODO: how can we detect duplicate observations / action transitions to save memory? (might not be super important)
-        it = zip(self.walker_paths, actions, new_observations, rewards, freeze_mask)
-        for path, action, new_observation, reward, frozen in it:
+        it = zip(self.walker_paths, actions, new_observations, rewards, infos, freeze_mask)
+        for path, action, new_observation, reward, info, frozen in it:
             if frozen:
                 continue
 
             last_node = path.last_node
 
             # TODO: denote terminal states
-            new_node = StateNode(new_observation, reward, terminal=False)
+            new_node = StateNode(new_observation, reward, info, terminal=False)
             path.add_node(new_node)
 
             self.g.add_edge(last_node, new_node, action=copy(action))

@@ -38,6 +38,7 @@ class TreeSampler:
         actions = []
         weights = []
         rewards = []
+        infos = []
 
         path = self.tree.best_path
         for state, action in path:
@@ -50,15 +51,16 @@ class TreeSampler:
             # NOTE: never skip due to weight!
             weight = self._calculate_weight(state)
             weights.append([weight])
+            infos.append(state.info)
 
-
-        return observations, actions, weights, rewards
+        return observations, actions, weights, rewards, infos
 
     def _get_all_nodes_batch(self):
         observations = []
         child_actions = []
         child_weights = []
         rewards = []
+        infos = []
 
         g = self.tree.g
         for node in g.nodes:
@@ -84,14 +86,15 @@ class TreeSampler:
             child_actions.append(actions)
             child_weights.append(weights)
             rewards.append(node.reward)
+            infos.append(node.info)
 
-        return observations, child_actions, child_weights, rewards
+        return observations, child_actions, child_weights, rewards, infos
 
     def get_batch(self):
         if self.sample_type == "best_path":
-            obs, acts, weights, rewards = self._get_best_path_as_batch()
+            obs, acts, weights, rewards, infos = self._get_best_path_as_batch()
         elif self.sample_type == "all_nodes":
-            obs, acts, weights, rewards = self._get_all_nodes_batch()
+            obs, acts, weights, rewards, infos = self._get_all_nodes_batch()
         else:
             raise ValueError(f"Sample type {self.sample_type} is not supported.")
 
@@ -113,4 +116,4 @@ class TreeSampler:
                 }
             )
 
-        return obs, acts, weights, rewards
+        return obs, acts, weights, rewards, infos

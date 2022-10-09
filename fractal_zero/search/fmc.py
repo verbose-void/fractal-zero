@@ -141,6 +141,7 @@ class FMC:
                 self.actions,
                 self.observations,
                 self.rewards,
+                self.infos,
                 freeze_steps,
             )
 
@@ -206,6 +207,8 @@ class FMC:
         self.rewards = self.rewards.clone()
         if isinstance(self.observations, torch.Tensor):
             self.observations = self.observations.clone()
+        if isinstance(self.infos, torch.Tensor):
+            self.infos = self.infos.clone()
 
         for attr in _ATTRIBUTES_TO_CLONE:
             self._clone_variable(attr)
