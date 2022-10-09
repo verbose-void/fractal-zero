@@ -26,9 +26,6 @@ def test_cloning_primitive():
         list_cloned = cloning_primitive(x.copy().tolist(), partners, clone_mask)
 
         np.testing.assert_equal(x, orig_x)
-        print(x)
-        print(partners)
-        print(clone_mask)
         assert np_cloned.tolist() == list_cloned
         assert th_cloned.tolist() == list_cloned
 
