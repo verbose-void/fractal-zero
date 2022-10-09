@@ -53,6 +53,8 @@ class _RayWrappedEnvironment:
         self._env = load_environment(env)
 
     def set_state(self, env: gym.Env):
+        self.last_ret = None
+
         if not isinstance(env, gym.Env):
             raise ValueError(f"Expected a gym environment. Got {type(env)}.")
 
@@ -89,6 +91,7 @@ class _WrappedEnvironment:
         if not isinstance(env, gym.Env):
             raise ValueError(f"Expected a gym environment. Got {type(env)}.")
 
+        self.last_ret = None
         self._env = deepcopy(env)
 
     def get_state(self) -> gym.Env:
