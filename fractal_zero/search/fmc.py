@@ -213,9 +213,11 @@ class FMC:
         for attr in _ATTRIBUTES_TO_CLONE:
             self._clone_variable(attr)
 
-        # sanity check (TODO: maybe remove this?)
-        if not torch.allclose(self.scores, self.tree.get_total_rewards()):
+        # sanity checks (TODO: maybe remove this?)
+        if not torch.allclose(self.scores, self.tree.get_total_rewards(), rtol=0.001):
             raise ValueError(self.scores, self.tree.get_total_rewards())
+        # if self.rewards[self.freeze_mask].sum().item() != 0:
+        #     raise ValueError(self.rewards[self.freeze_mask], self.rewards[self.freeze_mask].sum())
 
     def _clone_variable(self, subject_var_name: str):
         subject = getattr(self, subject_var_name)
