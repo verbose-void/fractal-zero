@@ -261,3 +261,17 @@ class GameTree:
 
         nx.draw(self.g, labels=labels, with_labels=True, node_color=colors, node_size=80)
         plt.show()
+
+class StepOutputs:
+    def __init__(self, states, observations, rewards, dones, infos):
+        self.states = states
+        self.observations = observations
+        self.rewards = rewards
+        self.infos = infos
+        self.dones = dones
+
+    def __str__(self):
+        return f"StepOutputs(actions={self.actions}, observations={self.observations}, rewards={self.rewards}, infos={self.infos}, dones={self.dones})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
