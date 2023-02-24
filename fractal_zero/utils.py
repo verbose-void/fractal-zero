@@ -47,6 +47,24 @@ def mean_min_max_dict(name: str, arr) -> dict:
         f"{name}/max": arr.max(),
     }
 
+def normalize_and_log_exp(vector: torch.Tensor) -> torch.Tensor:
+    mean = torch.mean(vector)
+    std = torch.std(vector)
+    if std == 0:
+        return torch.ones(len(vector))
+
+    # Subtract the mean from the vector, and divide by the standard deviation.
+    # This "standardizes" the vector so that it has mean 0 and standard deviation 1.
+    relativized_vector: torch.Tensor = (vector - mean) / std
+
+    # Apply a non-linear transformation to the standardized vector that makes it more sensitive to differences in the tails of the distribution.
+    # All values are positive, because the `balance` hyperparameter exponentiates the vector, and want to maintain monotonicity.
+    return torch.where(
+        relativized_vector > 0,
+        torch.log1p(relativized_vector) + 1,
+        torch.exp(relativized_vector),
+    )
+
 
 def _clone_sequence(
     l: Sequence, clone_partners, clone_mask, clone_func: Callable = None
