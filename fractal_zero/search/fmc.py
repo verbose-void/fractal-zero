@@ -1,36 +1,12 @@
-from copy import copy, deepcopy
-from typing import Callable, List
+from typing import Callable
 import torch
 import numpy as np
 
 from tqdm import tqdm
 from fractal_zero.search.tree import GameTree
-from fractal_zero.utils import cloning_primitive
+from fractal_zero.utils import cloning_primitive, normalize_and_log_exp
 
 from fractal_zero.vectorized_environment import VectorizedEnvironment
-
-
-def _l2_distance(vec0, vec1):
-    if vec0.dim() > 2:
-        vec0 = vec0.flatten(start_dim=1)
-    elif vec0.dim() == 1:
-        vec0 = vec0.unsqueeze(-1)
-    if vec1.dim() > 2:
-        vec1 = vec1.flatten(start_dim=1)
-    elif vec1.dim() == 1:
-        vec1 = vec1.unsqueeze(-1)
-    return torch.norm(vec0 - vec1, dim=-1)
-
-
-def _relativize_vector(vector: torch.Tensor):
-    std = vector.std()
-    if std == 0:
-        return torch.ones(len(vector))
-    standard = (vector - vector.mean()) / std
-    standard[standard > 0] = torch.log(1 + standard[standard > 0]) + 1
-    standard[standard <= 0] = torch.exp(standard[standard <= 0])
-    return standard
-
 
 _ATTRIBUTES_TO_CLONE = (
     "states",
@@ -38,11 +14,10 @@ _ATTRIBUTES_TO_CLONE = (
     "rewards",
     "dones",
     "scores",
-    "average_rewards",
+    "average_scores",
     "actions",
     "infos",
 )
-
 
 class FMC:
     def __init__(
@@ -51,7 +26,7 @@ class FMC:
         balance: float = 1.0,
         disable_cloning: bool = False,
         use_average_rewards: bool = False,
-        similarity_function: Callable = _l2_distance,
+        similarity_function: Callable = torch.dist,
         freeze_best: bool = True,
         track_tree: bool = True,
         prune_tree: bool = True,
@@ -67,6 +42,10 @@ class FMC:
         self.prune_tree = prune_tree
 
         self.reset()
+    
+    @property
+    def num_walkers(self):
+        return self.vec_env.n
 
     def reset(self):
         # TODO: may need to make this decision of root observations more effectively for stochastic environments.
@@ -82,7 +61,7 @@ class FMC:
         )
 
         self.scores = torch.zeros(self.num_walkers, dtype=float)
-        self.average_rewards = torch.zeros(self.num_walkers, dtype=float)
+        self.average_scores = torch.zeros(self.num_walkers, dtype=float)
         self.clone_mask = torch.zeros(self.num_walkers, dtype=bool)
         self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
 
@@ -93,28 +72,26 @@ class FMC:
         )
         self.did_early_exit = False
 
-    @property
-    def num_walkers(self):
-        return self.vec_env.n
-
-    def _can_early_exit(self):
-        return torch.all(self.dones)
-
     def simulate(self, steps: int, use_tqdm: bool = False):
         if self.did_early_exit:
             raise ValueError("Already early exited.")
 
-        it = tqdm(range(steps), disable=not use_tqdm)
-        for _ in it:
+        for _ in tqdm(range(steps), disable=not use_tqdm):
             self._perturbate()
 
             if self._can_early_exit():
                 self.did_early_exit = True
                 break
-
-            self._clone()
+            
+            self._clone_walkers()
 
     def _perturbate(self):
+        """
+        Perturbate the walkers by sampling actions from the action space and
+        stepping the environment.
+        """
+        # Why logical or here? Do you now always want for freeze if the walker is in the terminal state?
+        # What if done is 1 and freeze_mask is 1?
         freeze_steps = torch.logical_or(self.freeze_mask, self.dones)
 
         # TODO: don't sample actions for frozen environments? (make sure to remove the comments about this)
@@ -129,7 +106,7 @@ class FMC:
             self.infos,
         ) = self.vec_env.batch_step(self.actions, freeze_steps)
         self.scores += self.rewards
-        self.average_rewards = self.scores / self.tree.get_depths()
+        self.average_scores = self.scores / self.tree.get_depths()
 
         if self.tree:
             # NOTE: the actions that are in the tree will diverge slightly from
@@ -146,54 +123,8 @@ class FMC:
             )
 
         self._set_freeze_mask()
-
-    def _set_freeze_mask(self):
-        self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
-        if self.freeze_best:
-            if self.use_average_rewards:
-                metric = self.average_rewards.argmax()
-            else:
-                metric = self.scores
-            self.freeze_mask[metric.argmax()] = 1
-
-    def _set_valid_clone_partners(self):
-        valid_clone_partners = np.arange(self.num_walkers)
-
-        # cannot clone to walkers at terminal states
-        valid_clone_partners = valid_clone_partners[(self.dones == False).numpy()]
-
-        # TODO: make it so walkers cannot clone to themselves
-        clone_partners = np.random.choice(valid_clone_partners, size=self.num_walkers)
-        self.clone_partners = torch.tensor(clone_partners, dtype=int).long()
-
-    def _set_clone_variables(self):
-        self._set_valid_clone_partners()
-        self.similarities = self.similarity_function(
-            self.states, self.states[self.clone_partners]
-        )
-
-        rel_sim = _relativize_vector(self.similarities)
-
-        if self.use_average_rewards:
-            rel_score = _relativize_vector(self.average_rewards)
-        else:
-            rel_score = _relativize_vector(self.scores)
-
-        self.virtual_rewards = rel_score**self.balance * rel_sim
-
-        vr = self.virtual_rewards
-        pair_vr = self.virtual_rewards[self.clone_partners]
-        value = (pair_vr - vr) / torch.where(vr > 0, vr, 1e-8)
-        self.clone_mask = (value >= torch.rand(1)).bool()
-
-        # clone all walkers at terminal states
-        self.clone_mask[
-            self.dones
-        ] = True  # NOTE: sometimes done might be a preferable terminal state (winning)... deal with this.
-        # don't clone frozen walkers
-        self.clone_mask[self.freeze_mask] = False
-
-    def _clone(self):
+    
+    def _clone_walkers(self):
         self._set_clone_variables()
 
         if self.disable_cloning:
@@ -210,6 +141,7 @@ class FMC:
         if isinstance(self.infos, torch.Tensor):
             self.infos = self.infos.clone()
 
+        # What is this for? 
         for attr in _ATTRIBUTES_TO_CLONE:
             self._clone_variable(attr)
 
@@ -218,6 +150,72 @@ class FMC:
             raise ValueError(self.scores, self.tree.get_total_rewards())
         # if self.rewards[self.freeze_mask].sum().item() != 0:
         #     raise ValueError(self.rewards[self.freeze_mask], self.rewards[self.freeze_mask].sum())
+    
+    def _set_freeze_mask(self):
+        self.freeze_mask = torch.zeros((self.num_walkers), dtype=bool)
+        if self.freeze_best:
+            self.freeze_mask[self._score_walkers().argmax()] = 1
+    
+    def _set_clone_variables(self):
+        self._set_valid_clone_partners()
+        self._set_clone_mask()
+    
+
+    def _set_valid_clone_partners(self):
+        # cannot clone to walkers at terminal states
+        valid_clone_partners = np.arange(self.num_walkers)[
+            (self.dones == False).numpy()
+        ]
+
+        # TODO: make it so walkers cannot clone to themselves
+        clone_partners = np.random.choice(valid_clone_partners, size=self.num_walkers)
+        self.clone_partners = torch.tensor(clone_partners, dtype=int).long()
+    
+    def _set_clone_mask(self):
+        values = self._get_walker_values()
+        self.clone_mask: torch.Tensor[bool] = (values >= torch.rand(1)).bool()
+
+        # clone all walkers at terminal states and not frozen walkers
+        self.clone_mask[
+            self.dones
+        ] = True  # NOTE: sometimes done might be a preferable terminal state (winning)... deal with this.
+        self.clone_mask[self.freeze_mask] = False
+    
+    def _get_walker_values(self) -> torch.Tensor:
+        """
+        Walker values are scored and used to determine which walkers should be cloned.
+        """
+        walker_partner_similarities: torch.Tensor = self.similarity_function(
+            self.states, self.states[self.clone_partners]
+        )
+
+        relativized_walker_similarity_scores: torch.Tensor = normalize_and_log_exp(
+            walker_partner_similarities
+        )
+        relativized_walker_scores: torch.Tensor = (
+            normalize_and_log_exp(self.average_scores)
+            if self.use_average_rewards
+            else normalize_and_log_exp(self.scores)
+        )
+
+        # Why do we power the walker exploitation scores?
+        virtual_rewards: torch.Tensor = (
+            relativized_walker_scores**self.balance
+            * relativized_walker_similarity_scores
+        )
+
+        pair_virtual_rewards = virtual_rewards[self.clone_partners]
+
+        # What is `value`?
+        return (pair_virtual_rewards - virtual_rewards) / torch.where(
+            virtual_rewards > 0, virtual_rewards, 1e-8
+        )
+
+    def _score_walkers(self) -> torch.Tensor:
+        return self.average_scores if self.use_average_rewards else self.scores
+    
+    def _can_early_exit(self) -> torch.Tensor:
+        return torch.all(self.dones)
 
     def _clone_variable(self, subject_var_name: str):
         subject = getattr(self, subject_var_name)
